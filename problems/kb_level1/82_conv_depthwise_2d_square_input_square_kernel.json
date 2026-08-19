@@ -1,0 +1,29 @@
+{
+  "name": "82_conv_depthwise_2d_square_input_square_kernel",
+  "op_type": "conv2d",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        16,
+        64,
+        512,
+        512
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        16,
+        64,
+        512,
+        512
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Performs a depthwise 2D convolution operation with square input and square kernel.\n\n    Args:\n        in_channels (int): Number of channels in the input tensor.\n        kernel_size (int): Size of the convolution kernel.\n        stride (int, optional): Stride of the convolution. Defaults to 1.\n        padding (int, optional): Padding applied to the input. Defaults to 0.\n        bias (bool, optional): If `True`, adds a learnable bias to the output. Defaults to `False`.\n    \"\"\"\n    def __init__(self, in_channels: int, kernel_size: int, stride: int = 1, padding: int = 0, bias: bool = False):\n        super(Model, self).__init__()\n        self.conv2d = nn.Conv2d(in_channels, in_channels, kernel_size, stride=stride, padding=padding, groups=in_channels, bias=bias)\n        \n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        \"\"\"\n        Performs the depthwise 2D convolution.\n\n        Args:\n            x (torch.Tensor): Input tensor of shape (batch_size, in_channels, height, width).\n\n        Returns:\n            torch.Tensor: Output tensor of shape (batch_size, in_channels, height_out, width_out).\n        \"\"\"\n        return self.conv2d(x)\n\n# Test code\nbatch_size = 16\nin_channels = 64\nkernel_size = 3\nwidth = 512\nheight = 512\nstride = 1\npadding = 0\n\ndef get_inputs():\n    x = torch.rand(batch_size, in_channels, height, width)\n    return [x]\n\ndef get_init_inputs():\n    return [in_channels, kernel_size, stride, padding]\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/82_conv_depthwise_2d_square_input_square_kernel_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

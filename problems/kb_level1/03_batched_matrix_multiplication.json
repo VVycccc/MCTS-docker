@@ -1,0 +1,36 @@
+{
+  "name": "03_batched_matrix_multiplication",
+  "op_type": "gemm",
+  "inputs": [
+    {
+      "name": "A",
+      "shape": [
+        128,
+        512,
+        1024
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "B",
+      "shape": [
+        128,
+        1024,
+        2048
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        128,
+        512,
+        1024
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn.functional\nimport math\n\ndef run(A, B):\n    return torch.bmm(A, B)"
+}

@@ -1,0 +1,33 @@
+{
+  "name": "13_matmul_for_symmetric_matrices",
+  "op_type": "gemm",
+  "inputs": [
+    {
+      "name": "A",
+      "shape": [
+        4096,
+        4096
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "B",
+      "shape": [
+        4096,
+        4096
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        4096,
+        4096
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Simple model that performs a single matrix multiplication (C = A * B) with A and B being symmetric matrices.\n    \"\"\"\n    def __init__(self):\n        super(Model, self).__init__()\n    \n    def forward(self, A, B):\n        \"\"\"\n        Performs matrix multiplication of two symmetric matrices.\n\n        Args:\n            A (torch.Tensor): Input matrix A, shape (N, N), symmetric.\n            B (torch.Tensor): Input matrix B, shape (N, N), symmetric.\n\n        Returns:\n            torch.Tensor: Output matrix C, shape (N, N).\n        \"\"\"\n        return torch.matmul(A, B)\n\nN = 4096\n\ndef get_inputs():\n    \"\"\"\n    Generates a pair of random symmetric matrices for testing.\n\n    Returns:\n        list: List containing two symmetric tensors A and B.\n    \"\"\"\n    A = torch.rand(N, N)\n    A = (A + A.T) / 2  # Ensure symmetry\n    B = torch.rand(N, N)\n    B = (B + B.T) / 2  # Ensure symmetry\n    return [A, B]\n\ndef get_init_inputs():\n    \"\"\"\n    No specific initialization inputs needed for this model.\n\n    Returns:\n        list: Empty list.\n    \"\"\"\n    return []\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/13_matmul_for_symmetric_matrices_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(A, B):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(A.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache = _model_cache.to(A.device).eval()\n        _model_device = str(A.device)\n    return _model_cache(A, B)\n"
+}

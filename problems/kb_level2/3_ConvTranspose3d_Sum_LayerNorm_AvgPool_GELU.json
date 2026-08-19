@@ -1,0 +1,25 @@
+{
+  "name": "l2_3_ConvTranspose3d_Sum_LayerNorm_AvgPool_GELU",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        32,
+        32,
+        16,
+        32,
+        32
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Model that performs a 3D transposed convolution, followed by a sum, layer normalization, average pooling, and GELU activation.\n    \"\"\"\n    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, output_padding, sum_weight, norm_shape, pool_kernel_size):\n        super(Model, self).__init__()\n        self.conv_transpose = nn.ConvTranspose3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding)\n        self.sum_weight = nn.Parameter(torch.tensor(sum_weight))\n        self.norm = nn.LayerNorm(norm_shape)\n        self.avg_pool = nn.AvgPool3d(kernel_size=pool_kernel_size)\n        self.gelu = nn.GELU()\n\n    def forward(self, x):\n        x = self.conv_transpose(x)\n        x = x + self.sum_weight\n        x = self.norm(x)\n        x = self.avg_pool(x)\n        x = self.gelu(x)\n        return x\n\nbatch_size = 32\nin_channels = 32\nout_channels = 64\ndepth, height, width = 16, 32, 32\nkernel_size = (3, 3, 3)\nstride = (2, 2, 2)\npadding = (1, 1, 1)\noutput_padding = (1, 1, 1)\nsum_weight = 1.0\nnorm_shape = (out_channels,)\npool_kernel_size = (2, 2, 2)\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_channels, depth, height, width)]\n\ndef get_init_inputs():\n    return [in_channels, out_channels, kernel_size, stride, padding, output_padding, sum_weight, norm_shape, pool_kernel_size]\n# Frozen weights (loaded from .pt at module init):\n#   sum_weight: [] (float32)\n#   conv_transpose.weight: [32, 64, 3, 3, 3] (float32)\n#   conv_transpose.bias: [64] (float32)\n#   norm.weight: [64] (float32)\n#   norm.bias: [64] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/3_ConvTranspose3d_Sum_LayerNorm_AvgPool_GELU_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    conv_transpose_bias = _weights['conv_transpose.bias']  # [64]\n    conv_transpose_weight = _weights['conv_transpose.weight']  # [32, 64, 3, 3, 3]\n    norm_bias = _weights['norm.bias']  # [64]\n    norm_weight = _weights['norm.weight']  # [64]\n    sum_weight = _weights['sum_weight']  # []\n\n    x = _torch.nn.functional.conv_transpose3d(x, conv_transpose_weight, conv_transpose_bias)\n    x = x + sum_weight\n    x = _torch.nn.functional.layer_norm(x, normalized_shape=x.shape[1:], weight=norm_weight, bias=norm_bias)\n    x = _torch.nn.functional.avg_pool3d(x, kernel_size=2)\n    x = _torch.nn.functional.gelu(x)\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

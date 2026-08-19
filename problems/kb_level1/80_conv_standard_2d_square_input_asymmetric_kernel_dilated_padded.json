@@ -1,0 +1,29 @@
+{
+  "name": "80_conv_standard_2d_square_input_asymmetric_kernel_dilated_padded",
+  "op_type": "conv2d",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        8,
+        32,
+        512,
+        512
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        8,
+        32,
+        512,
+        512
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Performs a standard 2D convolution operation with square input and asymmetric kernel, with dilation and padding.\n\n    Args:\n        in_channels (int): Number of channels in the input tensor.\n        out_channels (int): Number of channels produced by the convolution.\n        kernel_size (tuple): Size of the convolution kernel (height, width). \n        stride (int, optional): Stride of the convolution. Defaults to 1.\n        padding (tuple, optional): Padding applied to the input (top/bottom, left/right). Defaults to (0, 0).\n        dilation (tuple, optional): Spacing between kernel elements (height, width). Defaults to (1, 1).\n        bias (bool, optional): If `True`, adds a learnable bias to the output. Defaults to `False`.\n    \"\"\"\n    def __init__(self, in_channels: int, out_channels: int, kernel_size: tuple, stride: int = 1, padding: tuple = (0, 0), dilation: tuple = (1, 1), bias: bool = False):\n        super(Model, self).__init__()\n        self.conv2d = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, dilation=dilation, bias=bias)\n        \n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        \"\"\"\n        Performs the 2D convolution.\n\n        Args:\n            x (torch.Tensor): Input tensor of shape (batch_size, in_channels, height, width).\n\n        Returns:\n            torch.Tensor: Output tensor of shape (batch_size, out_channels, height_out, width_out).\n        \"\"\"\n        return self.conv2d(x)\n\n# Test code\nbatch_size = 8\nin_channels = 32\nout_channels = 64\nkernel_size = (5, 9)\nwidth = 512\nheight = 512\nstride = 1\npadding = (2, 4)\ndilation = (2, 3)\n\ndef get_inputs():\n    x = torch.rand(batch_size, in_channels, height, width)\n    return [x]\n\ndef get_init_inputs():\n    return [in_channels, out_channels, kernel_size, stride, padding, dilation]\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/80_conv_standard_2d_square_input_asymmetric_kernel_dilated_padded_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

@@ -1,0 +1,22 @@
+{
+  "name": "l2_95_Matmul_Add_Swish_Tanh_GELU_Hardtanh",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        1024,
+        8192
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Simple model that performs a matrix multiplication, adds a value, applies Swish, Tanh, GELU, and Hardtanh activation functions.\n    \"\"\"\n    def __init__(self, in_features, out_features, add_value_shape):\n        super(Model, self).__init__()\n        self.matmul = nn.Linear(in_features, out_features)\n        self.add_value = nn.Parameter(torch.randn(add_value_shape)) \n\n    def forward(self, x):\n        x = self.matmul(x)\n        x = x + self.add_value\n        x = torch.sigmoid(x) * x # Swish\n        x = torch.tanh(x)\n        x = torch.nn.functional.gelu(x) # GELU\n        x = torch.nn.functional.hardtanh(x, min_val=-1, max_val=1) # Hardtanh\n        return x\n\nbatch_size = 1024\nin_features = 8192\nout_features = 8192\nadd_value_shape = (out_features,)\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_features)]\n\ndef get_init_inputs():\n    return [in_features, out_features, add_value_shape]\n# Frozen weights (loaded from .pt at module init):\n#   add_value: [8192] (float32)\n#   matmul.weight: [8192, 8192] (float32)\n#   matmul.bias: [8192] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/95_Matmul_Add_Swish_Tanh_GELU_Hardtanh_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    add_value = _weights['add_value']  # [8192]\n    matmul_bias = _weights['matmul.bias']  # [8192]\n    matmul_weight = _weights['matmul.weight']  # [8192, 8192]\n\n    x = _torch.nn.functional.linear(x, matmul_weight, matmul_bias)\n    x = x + add_value\n    x = _torch.sigmoid(x)\n    x = _torch.tanh(x)\n    x = _torch.nn.functional.gelu(x) # GELU\n    x = _torch.nn.functional.hardtanh(x, min_val=-1, max_val=1) # Hardtanh\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

@@ -1,0 +1,14 @@
+请为以下算子生成 Triton kernel。
+
+# 实现方案
+{optimization_plan}
+
+# 参考实现（PyTorch，用于理解计算逻辑）
+```python
+{kernel_code}
+```
+
+# 可参考的相似实现（Triton 代码示例）
+{rag_examples}
+
+直接输出一个 ```python 代码块，包含 @triton.jit kernel 和 def run() 入口。

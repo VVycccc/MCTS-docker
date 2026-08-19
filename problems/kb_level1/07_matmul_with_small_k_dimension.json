@@ -1,0 +1,33 @@
+{
+  "name": "07_matmul_with_small_k_dimension",
+  "op_type": "gemm",
+  "inputs": [
+    {
+      "name": "A",
+      "shape": [
+        32768,
+        64
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "B",
+      "shape": [
+        64,
+        32768
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        32768,
+        64
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn.functional\nimport math\n\ndef run(A, B):\n    return torch.matmul(A, B)"
+}

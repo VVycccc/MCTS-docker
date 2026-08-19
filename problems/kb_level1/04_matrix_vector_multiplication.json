@@ -1,0 +1,33 @@
+{
+  "name": "04_matrix_vector_multiplication",
+  "op_type": "gemm",
+  "inputs": [
+    {
+      "name": "A",
+      "shape": [
+        2048,
+        1048576
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "B",
+      "shape": [
+        1048576,
+        1
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        2048,
+        1048576
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn.functional\nimport math\n\ndef run(A, B):\n    return torch.matmul(A, B)"
+}

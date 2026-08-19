@@ -1,0 +1,24 @@
+{
+  "name": "l2_2_ConvTranspose2d_BiasAdd_Clamp_Scaling_Clamp_Divide",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        128,
+        64,
+        128,
+        128
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Model that performs a transposed convolution, adds a bias term, clamps, scales, clamps, and divides.\n    \"\"\"\n    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, output_padding, bias_shape, scaling_factor):\n        super(Model, self).__init__()\n        self.conv_transpose = nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding)\n        self.bias = nn.Parameter(torch.randn(bias_shape)) \n        self.scaling_factor = scaling_factor\n\n    def forward(self, x):\n        x = self.conv_transpose(x)\n        x = x + self.bias\n        x = torch.clamp(x, min=0.0, max=1.0)\n        x = x * self.scaling_factor\n        x = torch.clamp(x, min=0.0, max=1.0)\n        x = x / self.scaling_factor\n        return x\n\nbatch_size = 128\nin_channels  = 64  \nout_channels = 64  \nheight = width = 128 \nkernel_size = 3\nstride = 2\npadding = 1\noutput_padding = 1\nbias_shape = (out_channels, 1, 1)\nscaling_factor = 2.0\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_channels, height, width)]\n\ndef get_init_inputs():\n    return [in_channels, out_channels, kernel_size, stride, padding, output_padding, bias_shape, scaling_factor]\n# Frozen weights (loaded from .pt at module init):\n#   bias: [64, 1, 1] (float32)\n#   conv_transpose.weight: [64, 64, 3, 3] (float32)\n#   conv_transpose.bias: [64] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/2_ConvTranspose2d_BiasAdd_Clamp_Scaling_Clamp_Divide_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    bias = _weights['bias']  # [64, 1, 1]\n    conv_transpose_bias = _weights['conv_transpose.bias']  # [64]\n    conv_transpose_weight = _weights['conv_transpose.weight']  # [64, 64, 3, 3]\n\n    x = _torch.nn.functional.conv_transpose2d(x, conv_transpose_weight, conv_transpose_bias)\n    x = x + bias\n    x = _torch.clamp(x, min=0.0, max=1.0)\n    x = x * 2.0\n    x = _torch.clamp(x, min=0.0, max=1.0)\n    x = x / 2.0\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

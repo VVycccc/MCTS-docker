@@ -1,0 +1,215 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 900" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+
+  <rect width="1120" height="900" fill="#fbfbfd"/>
+
+  <!-- Title -->
+  <text x="560" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">DirecTune-MCTS 搜索算法（v6 · 0 AKG 依赖）</text>
+  <text x="560" y="60" text-anchor="middle" font-size="13" fill="#64748b">naive seed → MCTS 树搜索（P-UCT + 8 方向）→ champion = 全树最低延迟</text>
+
+  <!-- ============ Row 1: Seed pipeline ============ -->
+  <g id="seed-pipeline">
+    <!-- baseline -->
+    <rect x="60" y="92" width="170" height="56" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+    <text x="145" y="115" text-anchor="middle" font-size="13" font-weight="600" fill="#334155">baseline profile</text>
+    <text x="145" y="133" text-anchor="middle" font-size="11" fill="#64748b">PyTorch reference · latency</text>
+
+    <line x1="230" y1="120" x2="278" y2="120" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <!-- naive_seed_gen -->
+    <rect x="280" y="92" width="200" height="56" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="1.5"/>
+    <text x="380" y="113" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">naive_seed_gen</text>
+    <text x="380" y="131" text-anchor="middle" font-size="11" fill="#047857">纯 LLM + triton_api_ref · 朴素约束</text>
+    <!-- 0 AKG badge -->
+    <rect x="430" y="80" width="58" height="18" rx="9" fill="#059669"/>
+    <text x="459" y="93" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">0 AKG</text>
+
+    <line x1="480" y1="120" x2="528" y2="120" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <!-- naive seed -->
+    <rect x="530" y="92" width="180" height="56" rx="8" fill="#ecfdf5" stroke="#10b981"/>
+    <text x="620" y="113" text-anchor="middle" font-size="13" font-weight="600" fill="#065f46">naive seed kernel</text>
+    <text x="620" y="131" text-anchor="middle" font-size="11" fill="#047857">naiveness 1.00 · BLOCK 32 · 无 TC</text>
+
+    <line x1="620" y1="148" x2="620" y2="190" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="635" y="172" font-size="11" fill="#64748b" font-style="italic">作 root</text>
+  </g>
+
+  <!-- ============ Row 2 left: MCTS tree ============ -->
+  <g id="mcts-tree">
+    <rect x="40" y="200" width="560" height="380" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="60" y="222" font-size="13" font-weight="700" fill="#1e3a8a">MCTS 树（mcts.py · rollout 循环）</text>
+
+    <!-- root node -->
+    <rect x="250" y="238" width="140" height="58" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="320" y="258" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">root (seed)</text>
+    <text x="320" y="275" text-anchor="middle" font-size="10.5" fill="#334155">N=6 · W=2.1 · lat=9.98ms</text>
+    <text x="320" y="289" text-anchor="middle" font-size="9.5" fill="#64748b">depth 0</text>
+
+    <!-- edges root → depth1 -->
+    <line x1="290" y1="296" x2="110" y2="350" stroke="#94a3b8" stroke-width="1.2"/>
+    <line x1="310" y1="296" x2="240" y2="350" stroke="#94a3b8" stroke-width="1.2"/>
+    <line x1="330" y1="296" x2="370" y2="350" stroke="#94a3b8" stroke-width="1.2"/>
+    <line x1="350" y1="296" x2="500" y2="350" stroke="#94a3b8" stroke-width="1.2"/>
+
+    <!-- depth-1 children -->
+    <g font-size="10" fill="#334155">
+      <rect x="55" y="350" width="110" height="50" rx="7" fill="#f8fafc" stroke="#94a3b8"/>
+      <text x="110" y="368" text-anchor="middle" font-weight="600">algo_equiv</text>
+      <text x="110" y="383" text-anchor="middle" font-size="9.5" fill="#64748b">lat=3.95ms</text>
+      <text x="110" y="395" text-anchor="middle" font-size="9" fill="#64748b">N=2 r=+0.93</text>
+
+      <rect x="185" y="350" width="110" height="50" rx="7" fill="#f8fafc" stroke="#94a3b8"/>
+      <text x="240" y="368" text-anchor="middle" font-weight="600">mem_layout</text>
+      <text x="240" y="383" text-anchor="middle" font-size="9.5" fill="#64748b">lat=4.10ms</text>
+      <text x="240" y="395" text-anchor="middle" font-size="9" fill="#64748b">N=1 r=+0.89</text>
+
+      <!-- selected child (P-UCT pick) -->
+      <rect x="315" y="350" width="110" height="50" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+      <text x="370" y="368" text-anchor="middle" font-weight="600" fill="#92400e">timing_overlap</text>
+      <text x="370" y="383" text-anchor="middle" font-size="9.5" fill="#92400e">lat=3.98ms ★</text>
+      <text x="370" y="395" text-anchor="middle" font-size="9" fill="#92400e">N=2 r=+0.92</text>
+
+      <rect x="445" y="350" width="110" height="50" rx="7" fill="#f8fafc" stroke="#94a3b8"/>
+      <text x="500" y="368" text-anchor="middle" font-weight="600">precision_tc</text>
+      <text x="500" y="383" text-anchor="middle" font-size="9.5" fill="#64748b">lat=3.91ms</text>
+      <text x="500" y="395" text-anchor="middle" font-size="9" fill="#64748b">N=1 r=+0.94</text>
+    </g>
+
+    <text x="320" y="324" text-anchor="middle" font-size="9.5" fill="#64748b">depth 1 · 每子节点 = 父 kernel 施加该方向后的 patch</text>
+
+    <!-- depth-2 (under timing_overlap, the selected path) -->
+    <line x1="370" y1="400" x2="370" y2="448" stroke="#94a3b8" stroke-width="1.2"/>
+    <rect x="315" y="448" width="110" height="48" rx="7" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="370" y="466" text-anchor="middle" font-size="10" font-weight="600" fill="#334155">mem_layout</text>
+    <text x="370" y="480" text-anchor="middle" font-size="9.5" fill="#64748b">lat=3.98ms</text>
+    <text x="370" y="491" text-anchor="middle" font-size="9" fill="#64748b">N=1 r=+0.92</text>
+    <text x="370" y="430" text-anchor="middle" font-size="9.5" fill="#64748b">depth 2 · 叠加优化（A→B）</text>
+
+    <!-- P-UCT select arrow -->
+    <path d="M 320 296 Q 360 322 370 348" fill="none" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arrBlue)"/>
+    <text x="392" y="318" font-size="10.5" font-weight="600" fill="#2563eb">P-UCT select</text>
+
+    <!-- backprop arrow -->
+    <path d="M 240 400 Q 200 360 250 298" fill="none" stroke="#7c3aed" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrPurple)"/>
+    <text x="150" y="330" font-size="10.5" font-weight="600" fill="#7c3aed">backprop</text>
+    <text x="150" y="344" font-size="9.5" fill="#7c3aed">reward=log(sp)</text>
+
+    <!-- adaptive depth note -->
+    <rect x="55" y="520" width="530" height="46" rx="6" fill="#fef9f3" stroke="#fdba74"/>
+    <text x="68" y="540" font-size="11" font-weight="600" fill="#9a3412">动态深度（旋钮可 sweep）</text>
+    <text x="68" y="557" font-size="10" fill="#7c2d12">max_depth × scale · strategy: adaptive（子节点全无改进 &gt; min_depth → 早停死区）· rollout_depth（=1 子节点即终端 / =k 下行 k 层）</text>
+  </g>
+
+  <!-- ============ Row 2 right: rollout loop ============ -->
+  <g id="rollout-loop">
+    <rect x="620" y="200" width="460" height="380" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="640" y="222" font-size="13" font-weight="700" fill="#065f46">rollout 循环（每轮一次）</text>
+
+    <!-- step 1 -->
+    <rect x="640" y="240" width="420" height="44" rx="7" fill="#dbeafe" stroke="#2563eb"/>
+    <text x="655" y="260" font-size="12" font-weight="700" fill="#1e3a8a">1. Select</text>
+    <text x="655" y="276" font-size="10.5" fill="#334155">P-UCT 下行选首个未扩展叶：Q + c·P·√N/(1+N)</text>
+
+    <line x1="850" y1="284" x2="850" y2="296" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <!-- step 2 -->
+    <rect x="640" y="298" width="420" height="58" rx="7" fill="#fef3c7" stroke="#d97706"/>
+    <text x="655" y="318" font-size="12" font-weight="700" fill="#92400e">2. Expand（复用 unified_editor，0 AKG skill）</text>
+    <text x="655" y="334" font-size="10.5" fill="#7c2d12">父 kernel × 各适用方向 → 采 search/replace patch（FixCodeGen）</text>
+    <text x="655" y="348" font-size="10.5" fill="#7c2d12">失败回退 full_rewrite · 每方向 1 patch + free_explore</text>
+
+    <line x1="850" y1="356" x2="850" y2="368" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <!-- step 3 -->
+    <rect x="640" y="370" width="420" height="58" rx="7" fill="#f1f5f9" stroke="#475569"/>
+    <text x="655" y="390" font-size="12" font-weight="700" fill="#334155">3. Verify（_verify_code 共享关卡）</text>
+    <text x="655" y="406" font-size="10.5" fill="#475569">anti_pytorch → compile → correctness → benchmark</text>
+    <text x="655" y="420" font-size="10.5" fill="#475569">通过 → 成子节点（带 latency / hw_metrics）；不过丢弃</text>
+
+    <line x1="850" y1="428" x2="850" y2="440" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <!-- step 4 -->
+    <rect x="640" y="442" width="420" height="44" rx="7" fill="#ede9fe" stroke="#7c3aed"/>
+    <text x="655" y="462" font-size="12" font-weight="700" fill="#5b21b6">4. Backprop</text>
+    <text x="655" y="478" font-size="10.5" fill="#5b21b6">reward = log(seed_lat / node_lat) 沿路径回传，更新 N/W</text>
+
+    <!-- loop back arrow -->
+    <path d="M 1060 464 Q 1095 464 1095 360 Q 1095 262 1062 262" fill="none" stroke="#475569" stroke-width="1.3" stroke-dasharray="3 3" marker-end="url(#arr)"/>
+    <text x="1080" y="362" font-size="9.5" fill="#64748b" transform="rotate(-90 1080 362)">下一 rollout</text>
+
+    <!-- champion -->
+    <rect x="640" y="506" width="420" height="52" rx="7" fill="#059669"/>
+    <text x="655" y="528" font-size="12" font-weight="700" fill="#fff">champion = 全树最低延迟节点</text>
+    <text x="655" y="545" font-size="10.5" fill="#d1fae5">seed 永在树中 → carry-forward（不退化，治 TODO [A]）</text>
+  </g>
+
+  <!-- ============ Row 3: 8 directions + prior ============ -->
+  <g id="directions">
+    <rect x="40" y="600" width="1040" height="180" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="60" y="622" font-size="13" font-weight="700" fill="#0f172a">动作集：8 优化方向（方向分类器，每 episode 1 次 LLM，按算子语义判适用性 + 排序）</text>
+
+    <!-- direction chips, 2 rows of 4 -->
+    <g font-size="11">
+      <!-- row 1 -->
+      <rect x="60"  y="638" width="232" height="34" rx="6" fill="#dbeafe" stroke="#60a5fa"/>
+      <text x="176" y="659" text-anchor="middle" font-weight="600" fill="#1e3a8a">⑤ algo_equiv</text>
+      <text x="290" y="659" font-size="9.5" fill="#64748b">P .28</text>
+
+      <rect x="302" y="638" width="232" height="34" rx="6" fill="#dbeafe" stroke="#60a5fa"/>
+      <text x="418" y="659" text-anchor="middle" font-weight="600" fill="#1e3a8a">⑦ reduction_struct</text>
+      <text x="532" y="659" font-size="9.5" fill="#64748b">P .24</text>
+
+      <rect x="544" y="638" width="232" height="34" rx="6" fill="#dbeafe" stroke="#60a5fa"/>
+      <text x="660" y="659" text-anchor="middle" font-weight="600" fill="#1e3a8a">③ mem_layout</text>
+      <text x="774" y="659" font-size="9.5" fill="#64748b">P .22</text>
+
+      <rect x="786" y="638" width="274" height="34" rx="6" fill="#fef3c7" stroke="#fbbf24"/>
+      <text x="910" y="659" text-anchor="middle" font-weight="600" fill="#92400e">⑥ timing_overlap</text>
+      <text x="1052" y="659" font-size="9.5" fill="#92400e">P .16</text>
+
+      <!-- row 2 -->
+      <rect x="60"  y="680" width="232" height="34" rx="6" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="176" y="701" text-anchor="middle" font-weight="600" fill="#334155">② precision_tc</text>
+      <text x="290" y="701" font-size="9.5" fill="#64748b">P .16</text>
+
+      <rect x="302" y="680" width="232" height="34" rx="6" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="418" y="701" text-anchor="middle" font-weight="600" fill="#334155">④ fusion</text>
+      <text x="532" y="701" font-size="9.5" fill="#64748b">P .12</text>
+
+      <rect x="544" y="680" width="232" height="34" rx="6" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="660" y="701" text-anchor="middle" font-weight="600" fill="#334155">⑧ control_flow_spec</text>
+      <text x="774" y="701" font-size="9.5" fill="#64748b">P .08</text>
+
+      <rect x="786" y="680" width="274" height="34" rx="6" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="910" y="701" text-anchor="middle" font-weight="600" fill="#334155">① tile_config</text>
+      <text x="1052" y="701" font-size="9.5" fill="#64748b">P .10</text>
+    </g>
+
+    <!-- prior formula -->
+    <rect x="60" y="724" width="1000" height="44" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+    <text x="76" y="744" font-size="11" font-weight="600" fill="#0f172a">先验 P（注入 P-UCT）：</text>
+    <text x="76" y="760" font-size="10.5" fill="#334155">P = blend( LLM 分类器收益排序 rank , dir_probe 实测分级表 _DIR_PROBE_PRIOR ) · mcts_prior_blend=0.5 · ⑥ forge=num_stages / forge_tle 增补 TLE 异步</text>
+  </g>
+
+  <!-- ============ Legend ============ -->
+  <g id="legend" font-size="10.5" fill="#475569">
+    <text x="60" y="812" font-weight="700" fill="#0f172a">图例</text>
+    <rect x="110" y="803" width="14" height="14" rx="3" fill="#d1fae5" stroke="#059669"/><text x="130" y="814">seed 生成（0 AKG）</text>
+    <rect x="270" y="803" width="14" height="14" rx="3" fill="#dbeafe" stroke="#2563eb"/><text x="290" y="814">select / root</text>
+    <rect x="380" y="803" width="14" height="14" rx="3" fill="#fef3c7" stroke="#d97706"/><text x="400" y="814">expand / 当前选中</text>
+    <rect x="540" y="803" width="14" height="14" rx="3" fill="#ede9fe" stroke="#7c3aed"/><text x="560" y="814">backprop reward</text>
+    <rect x="700" y="803" width="14" height="14" rx="3" fill="#059669"/><text x="720" y="814">champion（全树最优）</text>
+    <text x="880" y="814" fill="#9ca3af">— AKG 已退出 MCTS 关键路径（gen=naive, skill=off）</text>
+  </g>
+</svg>

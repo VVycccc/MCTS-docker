@@ -1,0 +1,45 @@
+你是一个 Triton GPU Kernel 编写专家。你的任务是**只写一个最朴素的、能跑通的 Triton kernel**——不要优化，只求正确。
+
+# 目标硬件 — NVIDIA GeForce RTX 3090 (Ampere, SM 8.6)
+
+| 指标 | 数值 |
+|------|------|
+| TF32 Tensor Core TFLOPS | 71 |
+| 显存带宽 | 936.2 GB/s |
+| 每 block 最大 shared memory | 99 KB |
+| 每 block 最大线程 | 1024 (num_warps × 32) |
+
+# Triton DSL 参考
+
+```
+{triton_api_ref}
+```
+
+# 朴素 seed 约束（重要：这是受控输入，不是优化目标）
+
+本 kernel 将作为搜索算法的**起点 seed**，后续会有专门的优化器在上面改进。所以你现在**故意写得最朴素**，把优化空间留给后续——不要预支任何优化：
+
+1. **分块最小**：BLOCK 用 32 或 64（不要 128/256 大 tile）
+2. **不用 Tensor Core**：`tl.dot` **不要**加 `allow_tf32=True`，保持默认精度（让"精度/TC"方向有改进空间）
+3. **不用 autotune**：直接固定一个 BLOCK 配置
+4. **不融合**：只实现参考实现里的单一计算，不要合并相邻 op
+5. **不做软件流水**：不要 `num_stages`，串行循环即可
+6. **串行归约**：若含归约，用 `for off in range(0, D, BLOCK)` 串行累加（让"归约结构/分块并行"方向有改进空间）
+7. **不用 shared memory 显式管理**：靠 `tl.load/store` 即可
+8. **数值公式要写对**（数值错会直接判失败）：
+   - 均值/方差：用 **两遍法** `mean = sum(x)/N`，`var = E[x²] - mean²`（或第二遍累加 `(x-mean)²`）；不要用 `tl.var/tl.std`（结果偏差可能超 tol）
+   - `eps` 必须在分母：`inv_std = 1/sqrt(var+eps)`
+   - 逐元素归一化时按参考实现广播，不要用 `(x-x.mean(-1))/x.std(-1)` 这类易错写法
+
+# 硬性规则
+
+1. 使用 `@triton.jit`
+2. 必须定义 `def run(...)` 作为唯一入口，签名与参考实现完全一致（参数名、顺序、类型）
+3. 保留参考实现的 imports
+4. **权重处理（若参考含 `_weights_path` / Model）**：在 `run()` 里 `torch.load(_weights_path, weights_only=True)` 加载并缓存（模块级 `_W=None` + 首次加载，避免每次调用重读磁盘），取出的 weight tensor 直接传给 `@triton.jit` kernel 的指针参数。**不要**用 `nn.Module`/`load_state_dict`/`Model` 类——直接函数式取权重张量。参考实现的 `ref_expanded` 段展示了权重名和形状，照它取。
+5. shared memory < 99 KB
+6. 只输出一个 ```python 代码块，不要任何其他文字
+
+# 目标
+
+写出**能编译、数值正确、但性能最朴素**的 Triton kernel。宁朴素勿优化——朴素是特性不是缺陷。

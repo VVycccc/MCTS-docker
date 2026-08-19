@@ -1,0 +1,22 @@
+{
+  "name": "l2_59_Matmul_Swish_Scaling",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        128,
+        32768
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Simple model that performs a matrix multiplication, applies Swish activation, and scales the result.\n    \"\"\"\n    def __init__(self, in_features, out_features, scaling_factor):\n        super(Model, self).__init__()\n        self.matmul = nn.Linear(in_features, out_features)\n        self.scaling_factor = scaling_factor\n\n    def forward(self, x):\n        x = self.matmul(x)\n        x = x * torch.sigmoid(x)  # Swish activation\n        x = x * self.scaling_factor\n        return x\n\nbatch_size = 128\nin_features = 32768\nout_features = 32768\nscaling_factor = 2.0\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_features)]\n\ndef get_init_inputs():\n    return [in_features, out_features, scaling_factor]\n# Frozen weights (loaded from .pt at module init):\n#   matmul.weight: [32768, 32768] (float32)\n#   matmul.bias: [32768] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/59_Matmul_Swish_Scaling_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    matmul_bias = _weights['matmul.bias']  # [32768]\n    matmul_weight = _weights['matmul.weight']  # [32768, 32768]\n\n    x = _torch.nn.functional.linear(x, matmul_weight, matmul_bias)\n    x = _torch.sigmoid(x)\n    x = x * 2.0\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

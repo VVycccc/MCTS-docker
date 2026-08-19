@@ -1,0 +1,24 @@
+{
+  "name": "l2_85_Conv2d_GroupNorm_Scale_MaxPool_Clamp",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        128,
+        8,
+        128,
+        128
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Model that performs convolution, group normalization, scaling, max pooling, and clamping.\n    \"\"\"\n    def __init__(self, in_channels, out_channels, kernel_size, num_groups, scale_shape, maxpool_kernel_size, clamp_min, clamp_max):\n        super(Model, self).__init__()\n        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size)\n        self.group_norm = nn.GroupNorm(num_groups, out_channels)\n        self.scale = nn.Parameter(torch.ones(scale_shape))\n        self.maxpool = nn.MaxPool2d(kernel_size=maxpool_kernel_size)\n        self.clamp_min = clamp_min\n        self.clamp_max = clamp_max\n\n    def forward(self, x):\n        \"\"\"\n        Args:\n            x: Input tensor of shape (batch_size, in_channels, height, width).\n        Returns:\n            Output tensor of shape (batch_size, out_channels, height', width').\n        \"\"\"\n        x = self.conv(x)\n        x = self.group_norm(x)\n        x = x * self.scale\n        x = self.maxpool(x)\n        x = torch.clamp(x, self.clamp_min, self.clamp_max)\n        return x\n\nbatch_size = 128\nin_channels = 8\nout_channels = 64\nheight, width = 128, 128 \nkernel_size = 3\nnum_groups = 16\nscale_shape = (out_channels, 1, 1)\nmaxpool_kernel_size = 4\nclamp_min = 0.0\nclamp_max = 1.0\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_channels, height, width)]\n\ndef get_init_inputs():\n    return [in_channels, out_channels, kernel_size, num_groups, scale_shape, maxpool_kernel_size, clamp_min, clamp_max]\n# Frozen weights (loaded from .pt at module init):\n#   scale: [64, 1, 1] (float32)\n#   conv.weight: [64, 8, 3, 3] (float32)\n#   conv.bias: [64] (float32)\n#   group_norm.weight: [64] (float32)\n#   group_norm.bias: [64] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/85_Conv2d_GroupNorm_Scale_MaxPool_Clamp_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    conv_bias = _weights['conv.bias']  # [64]\n    conv_weight = _weights['conv.weight']  # [64, 8, 3, 3]\n    group_norm_bias = _weights['group_norm.bias']  # [64]\n    group_norm_weight = _weights['group_norm.weight']  # [64]\n    scale = _weights['scale']  # [64, 1, 1]\n\n    x = _torch.nn.functional.conv2d(x, conv_weight, conv_bias)\n    x = _torch.nn.functional.group_norm(x, num_groups=1, weight=group_norm_weight, bias=group_norm_bias)\n    x = x * scale\n    x = _torch.nn.functional.max_pool2d(x, kernel_size=2)\n    x = _torch.clamp(x, 0.0, 1.0)\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

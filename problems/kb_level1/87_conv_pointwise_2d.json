@@ -1,0 +1,29 @@
+{
+  "name": "87_conv_pointwise_2d",
+  "op_type": "conv2d",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        16,
+        64,
+        1024,
+        1024
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        16,
+        64,
+        1024,
+        1024
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Performs a pointwise 2D convolution operation.\n\n    Args:\n        in_channels (int): Number of channels in the input tensor.\n        out_channels (int): Number of channels produced by the convolution.\n        bias (bool, optional): If `True`, adds a learnable bias to the output. Defaults to `False`.\n    \"\"\"\n    def __init__(self, in_channels: int, out_channels: int, bias: bool = False):\n        super(Model, self).__init__()\n        self.conv1d = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=bias)\n        \n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        \"\"\"\n        Performs the pointwise 2D convolution.\n\n        Args:\n            x (torch.Tensor): Input tensor of shape (batch_size, in_channels, height, width).\n\n        Returns:\n            torch.Tensor: Output tensor of shape (batch_size, out_channels, height, width).\n        \"\"\"\n        return self.conv1d(x)\n\n# Test code\nbatch_size = 16\nin_channels = 64\nout_channels = 128\nwidth = 1024\nheight = 1024\n\ndef get_inputs():\n    x = torch.rand(batch_size, in_channels, height, width)\n    return [x]\n\ndef get_init_inputs():\n    return [in_channels, out_channels]\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/87_conv_pointwise_2d_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

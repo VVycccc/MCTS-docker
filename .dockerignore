@@ -1,0 +1,27 @@
+# secrets / local state (real keys live in mounted config.yaml, not the image)
+config.yaml
+config_*.yaml
+!config.example.yaml
+.env
+.env.*
+.akg/settings.json
+
+# experiment outputs (huge, machine-specific)
+output/
+experiments/
+figures/
+docs/
+direction_stats.json
+.build/
+output_*.log
+
+# VCS / backups / caches
+.git
+.backup_pre_deakg/
+__pycache__/
+*.pyc
+akg_agents_logs/
+
+# large local data not shipped by default (mount or bake in on demand)
+problems/kb_level2/*.pt
+problems/kb_level3/

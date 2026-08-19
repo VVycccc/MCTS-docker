@@ -1,0 +1,24 @@
+{
+  "name": "l2_92_Conv2d_GroupNorm_Tanh_HardSwish_ResidualAdd_LogSumExp",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        128,
+        8,
+        128,
+        128
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Model that performs a convolution, applies Group Normalization, Tanh, HardSwish, \n    Residual Addition, and LogSumExp.\n    \"\"\"\n    def __init__(self, in_channels, out_channels, kernel_size, groups, eps=1e-5):\n        super(Model, self).__init__()\n        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size)\n        self.group_norm = nn.GroupNorm(groups, out_channels, eps=eps)\n        self.tanh = nn.Tanh()\n        self.hard_swish = nn.Hardswish()\n\n    def forward(self, x):\n        # Convolution\n        x_conv = self.conv(x)\n        # Group Normalization\n        x_norm = self.group_norm(x_conv)\n        # Tanh\n        x_tanh = self.tanh(x_norm)\n        # HardSwish\n        x_hard_swish = self.hard_swish(x_tanh)\n        # Residual Addition\n        x_res = x_conv + x_hard_swish\n        # LogSumExp\n        x_logsumexp = torch.logsumexp(x_res, dim=1, keepdim=True)\n        return x_logsumexp\n\nbatch_size = 128\nin_channels = 8\nout_channels = 64\nheight, width = 128, 128\nkernel_size = 3\ngroups = 16\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_channels, height, width)]\n\ndef get_init_inputs():\n    return [in_channels, out_channels, kernel_size, groups]\n# Frozen weights (loaded from .pt at module init):\n#   conv.weight: [64, 8, 3, 3] (float32)\n#   conv.bias: [64] (float32)\n#   group_norm.weight: [64] (float32)\n#   group_norm.bias: [64] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/92_Conv2d_GroupNorm_Tanh_HardSwish_ResidualAdd_LogSumExp_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    conv_bias = _weights['conv.bias']  # [64]\n    conv_weight = _weights['conv.weight']  # [64, 8, 3, 3]\n    group_norm_bias = _weights['group_norm.bias']  # [64]\n    group_norm_weight = _weights['group_norm.weight']  # [64]\n\n    x = _torch.nn.functional.conv2d(x, conv_weight, conv_bias)\n    x = _torch.nn.functional.group_norm(x, num_groups=1, weight=group_norm_weight, bias=group_norm_bias)\n    x_tanh = _torch.tanh(x_norm)\n    x_logsumexp = _torch.logsumexp(x_res, dim=1, keepdim=True)\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

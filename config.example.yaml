@@ -1,0 +1,90 @@
+# DirecTune Configuration (example — copy to config.yaml and fill in)
+# Copy this file and modify for batch experiments.
+
+# Search hyperparameters
+rounds: 15            # Total optimization rounds
+breadth: 4
+num_samples: 2
+topk_candidates: 2
+exp_n: 16
+topk: 8
+max_threshold: 1.04
+min_threshold: 1.15
+
+# Model (default for all stages; overridable by model_frontend / model_backend)
+model:
+  url: "https://api.example.com/v1"      # OpenAI-compatible endpoint
+  model: "your-model-name"
+  api_key: "sk-xxxxxxxx"                 # <-- fill in your key
+
+# Frontend API: generation (seed generator). Falls back to `model` if unset.
+model_frontend:
+  url: "https://api.example.com/v1"
+  model: "your-model-name"
+  api_key: "sk-xxxxxxxx"
+
+# Backend API: search (unified editor / MCTS / classic beam). Falls back to `model` if unset.
+model_backend:
+  url: "https://api.example.com/v1"
+  model: "your-model-name"
+  api_key: "sk-xxxxxxxx"
+
+# Fast model for FixCodeGen (v3/v4, falls back to model_frontend if not set)
+model_fast:
+  url: "https://api.example.com/v1"
+  model: "your-model-name"
+  api_key: "sk-xxxxxxxx"
+
+# Paths (relative to repo root; run from repo root)
+problem: "problems/kb_level1/01_square_matrix_multiplication.json"
+initial_solution: "problems/kb_level1/01_square_matrix_multiplication_initial.py"
+prompt_dir: "prompts"
+output_dir: "output"
+
+# Generator (multi-worker + refinement for correctness)
+gen_mode: "naive"           # v6 default: pure-LLM naive seed (0 AKG deps). v3/akg = fallback paths
+gen_workers: 1
+gen_refinement_rounds: 2
+gen_temperature: 0.7
+
+enable_code_checker: true
+
+# GPU
+timeout_seconds: 300
+
+# Hardware profiler (opt-in, adds ~5-15s per correct kernel)
+hw_profiler:
+  backend: "noop"     # ncu | noop — ncu needs passwordless `sudo ncu` + absolute python path
+  repeat: 100
+  # ncu_python: "/usr/bin/python3"   # absolute interpreter path used under `sudo ncu`
+                                      # default: env DT_NCU_PYTHON, else sys.executable
+
+triton_backend: "forge"    # forge (stock triton) | forge_tle (FlagTree triton + TLE)
+
+# Search mode — v6 default MCTS (tree + P-UCT + 8 directions); unified kept for ablation
+search_mode: "mcts"        # mcts | unified | classic
+unified_fail_threshold: 1
+unified_temperature: 0.7
+search_time_budget: 1200   # wall-clock budget (seconds) for the search stage
+
+# Direction-organized frontier (8-direction classifier)
+direction_organized_frontier: false
+direction_max_width: 4
+direction_free_explore: true
+direction_classifier_temp: 0.3
+skill_mode: "off"          # search-layer skill injection (v6 default off)
+
+# MCTS knobs (effective when search_mode: "mcts") — all sweepable
+mcts_rollouts: 8
+mcts_rollout_depth: 1
+mcts_cpuct: 1.0
+mcts_max_depth: 4
+mcts_depth_scale: 1.0
+mcts_depth_strategy: "adaptive"   # adaptive | fixed
+mcts_min_depth: 2
+mcts_stall_threshold: 0.0488
+mcts_stall_patience: 1
+mcts_use_directions: true
+mcts_prior_blend: 0.5
+mcts_rank_decay: 0.5
+mcts_free_explore_prior: 0.05

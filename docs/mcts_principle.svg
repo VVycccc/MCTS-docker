@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 760" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d97706"/>
+    </marker>
+    <marker id="arGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#059669"/>
+    </marker>
+    <marker id="arPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+
+  <rect width="780" height="760" fill="#fbfbfd"/>
+
+  <!-- Title -->
+  <text x="390" y="38" text-anchor="middle" font-size="20" font-weight="700" fill="#0f172a">MCTS 核心原理 → DirecTune-MCTS 实现</text>
+  <text x="390" y="60" text-anchor="middle" font-size="12" fill="#64748b">四步循环（通用）+ 每步在 DirecTune-MCTS 中具体做什么</text>
+
+  <!-- ============ Left: Tree ============ -->
+  <g id="tree">
+    <!-- faint full tree edges -->
+    <line x1="180" y1="130" x2="110" y2="210" stroke="#cbd5e1" stroke-width="1.2"/>
+    <line x1="180" y1="130" x2="250" y2="210" stroke="#cbd5e1" stroke-width="1.2"/>
+    <line x1="110" y1="210" x2="80" y2="300" stroke="#cbd5e1" stroke-width="1.2"/>
+    <line x1="110" y1="210" x2="140" y2="300" stroke="#cbd5e1" stroke-width="1.2"/>
+    <line x1="250" y1="210" x2="220" y2="300" stroke="#cbd5e1" stroke-width="1.2"/>
+    <line x1="250" y1="210" x2="280" y2="300" stroke="#cbd5e1" stroke-width="1.2"/>
+
+    <!-- faint full tree nodes -->
+    <g fill="#fff" stroke="#94a3b8" stroke-width="1.2">
+      <circle cx="180" cy="130" r="16"/>
+      <circle cx="110" cy="210" r="16"/>
+      <circle cx="250" cy="210" r="16"/>
+      <circle cx="80" cy="300" r="16"/>
+      <circle cx="140" cy="300" r="16"/>
+      <circle cx="220" cy="300" r="16"/>
+      <circle cx="280" cy="300" r="16"/>
+    </g>
+
+    <!-- 1. Selection: highlight path root -> b -> d -->
+    <line x1="180" y1="130" x2="110" y2="210" stroke="#2563eb" stroke-width="3"/>
+    <line x1="110" y1="210" x2="140" y2="300" stroke="#2563eb" stroke-width="3"/>
+    <circle cx="180" cy="130" r="16" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <circle cx="110" cy="210" r="16" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <circle cx="140" cy="300" r="16" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/>
+
+    <!-- N/W labels -->
+    <text x="180" y="170" text-anchor="middle" font-size="10" fill="#1e3a8a">N=12 W=8.3</text>
+    <text x="140" y="340" text-anchor="middle" font-size="10" fill="#1e3a8a">N=3 (叶节点)</text>
+
+    <!-- 2. Expansion: new child under selected leaf -->
+    <line x1="140" y1="300" x2="140" y2="385" stroke="#d97706" stroke-width="2.5" marker-end="url(#arAmber)"/>
+    <circle cx="140" cy="405" r="15" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+    <text x="165" y="402" font-size="10" fill="#92400e">新子节点</text>
+    <text x="165" y="416" font-size="9.5" fill="#92400e">= 父 kernel 加一个优化方向</text>
+
+    <!-- 3. Simulation: dashed rollout to terminal -->
+    <path d="M 140 420 Q 100 470 60 510" fill="none" stroke="#059669" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arGreen)"/>
+    <rect x="36" y="520" width="52" height="24" rx="12" fill="#d1fae5" stroke="#059669"/>
+    <text x="62" y="536" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">测延迟</text>
+    <text x="100" y="500" font-size="9.5" fill="#059669">新内核直接验证</text>
+    <text x="100" y="513" font-size="9.5" fill="#059669">并测出延迟</text>
+
+    <!-- 4. Backpropagation: purple return arrow up the path -->
+    <path d="M 160 395 Q 250 360 200 250 Q 170 180 196 132" fill="none" stroke="#7c3aed" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#arPurple)"/>
+
+    <!-- role labels -->
+    <text x="300" y="134" font-size="10" fill="#94a3b8">根（seed kernel）</text>
+    <text x="44" y="304" font-size="10" fill="#94a3b8">第 k 层</text>
+    <text x="150" y="470" font-size="10" fill="#64748b" font-style="italic">把结果往上回传</text>
+  </g>
+
+  <!-- divider -->
+  <line x1="335" y1="90" x2="335" y2="600" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- ============ Right: Four steps in plain Chinese ============ -->
+  <g id="steps">
+    <!-- 1 Select -->
+    <rect x="350" y="88" width="400" height="108" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+    <text x="366" y="112" font-size="13" font-weight="700" fill="#1e3a8a">① 选择</text>
+    <text x="366" y="136" font-size="12" fill="#1e3a8a">从根节点出发，一层层往下走，走到一个还没怎么</text>
+    <text x="366" y="154" font-size="12" fill="#1e3a8a">被探索过的叶节点。往下走时按 UCT 打分挑路：</text>
+    <text x="366" y="174" font-size="12" fill="#1e3a8a">既看"这条路径历史加速好不好"，也看"这条路试</text>
+    <text x="366" y="190" font-size="12" fill="#1e3a8a">得够不够多"，避免老走同一条。</text>
+
+    <!-- 2 Expand -->
+    <rect x="350" y="208" width="400" height="140" rx="8" fill="#fef3c7" stroke="#d97706"/>
+    <text x="366" y="232" font-size="13" font-weight="700" fill="#92400e">② 扩展</text>
+    <text x="366" y="256" font-size="12" fill="#7c2d12">在这个叶节点上，从 8 个优化方向里挑一个还没用</text>
+    <text x="366" y="274" font-size="12" fill="#7c2d12">过的，让 LLM 把父 kernel 改一改，生成一个新内核。</text>
+    <text x="366" y="300" font-size="12" fill="#7c2d12">改的方式是局部搜索/替换补丁；改不出来就退回整</text>
+    <text x="366" y="318" font-size="12" fill="#7c2d12">段重写。</text>
+    <text x="366" y="340" font-size="11.5" fill="#92400e">8 个方向：tile 配置 / 精度 / 布局 / 融合 / 算法等价 / 时序重叠 / 归约结构 / 控制流特化</text>
+
+    <!-- 3 Simulate -->
+    <rect x="350" y="360" width="400" height="108" rx="8" fill="#d1fae5" stroke="#059669"/>
+    <text x="366" y="384" font-size="13" font-weight="700" fill="#065f46">③ 模拟</text>
+    <text x="366" y="408" font-size="12" fill="#065f46">验证刚生成的新内核是否正确，并测出它的延迟。</text>
+    <text x="366" y="428" font-size="12" fill="#065f46">正确性关卡：禁用 PyTorch → 编译 → 算对 → 测速。</text>
+    <text x="366" y="448" font-size="12" fill="#065f46">这里不像棋类那样随机走到底，而是直接拿实测延迟</text>
+    <text x="366" y="466" font-size="12" fill="#065f46">当作这一局的"结果"。</text>
+
+    <!-- 4 Backprop -->
+    <rect x="350" y="480" width="400" height="120" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+    <text x="366" y="504" font-size="13" font-weight="700" fill="#5b21b6">④ 回传</text>
+    <text x="366" y="528" font-size="12" fill="#5b21b6">把这次的结果（相对 seed 的加速比取对数）沿着刚才</text>
+    <text x="366" y="546" font-size="12" fill="#5b21b6">走过的路径，一路回传到根，更新每个节点的访问次</text>
+    <text x="366" y="564" font-size="12" fill="#5b21b6">数和累计收益。</text>
+    <text x="366" y="588" font-size="12" fill="#5b21b6">最后 champion = 整棵树里延迟最低的那个内核；seed</text>
+    <text x="366" y="606" font-size="12" fill="#5b21b6">永远在树里，所以不会越搜越差。</text>
+
+    <!-- cycle arrows between steps -->
+    <path d="M 550 196 L 550 204" fill="none" stroke="#475569" stroke-width="1.4" marker-end="url(#ar)"/>
+    <path d="M 550 348 L 550 356" fill="none" stroke="#475569" stroke-width="1.4" marker-end="url(#ar)"/>
+    <path d="M 550 468 L 550 476" fill="none" stroke="#475569" stroke-width="1.4" marker-end="url(#ar)"/>
+    <!-- 4 back up to 1 (left side loop) -->
+    <path d="M 350 540 Q 322 540 322 330 Q 322 142 348 142" fill="none" stroke="#475569" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+    <text x="316" y="340" font-size="10" fill="#64748b" text-anchor="end" transform="rotate(-90 316 340)">重复直至预算用尽</text>
+  </g>
+
+  <!-- ============ Bottom footer: cross-cutting detail (plain) ============ -->
+  <g id="footer">
+    <!-- adaptive depth -->
+    <rect x="30" y="620" width="350" height="116" rx="8" fill="#fff" stroke="#e2e8f0"/>
+    <text x="46" y="644" font-size="12" font-weight="700" fill="#0f172a">搜多深可以调</text>
+    <text x="46" y="668" font-size="11.5" fill="#334155">实际深度 = 最大深度 × 一个乘子（可外层 sweep）</text>
+    <text x="46" y="688" font-size="11.5" fill="#334155">自适应模式：如果某条路往下试了几层都没变好，</text>
+    <text x="46" y="706" font-size="11.5" fill="#334155">就提前停掉这条，把预算让给别的方向。</text>
+    <text x="46" y="726" font-size="11.5" fill="#64748b">避免在"怎么改都快不了"的算子上白费力气。</text>
+
+    <!-- why tree -->
+    <rect x="400" y="620" width="350" height="116" rx="8" fill="#fff" stroke="#e2e8f0"/>
+    <text x="416" y="644" font-size="12" font-weight="700" fill="#0f172a">为什么用树</text>
+    <text x="416" y="668" font-size="11.5" fill="#334155">每个节点 = 一个已验证正确的内核。</text>
+    <text x="416" y="688" font-size="11.5" fill="#334155">每往下一层 = 在父内核上再叠加一个优化方向</text>
+    <text x="416" y="706" font-size="11.5" fill="#334155">（A→B→C 这样层层叠加）。</text>
+    <text x="416" y="726" font-size="11.5" fill="#64748b">这样 MCTS 才能搜"优化序列"，而不是每轮孤立单改。</text>
+  </g>
+</svg>

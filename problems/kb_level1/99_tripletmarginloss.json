@@ -1,0 +1,35 @@
+{
+  "name": "99_tripletmarginloss",
+  "op_type": "elementwise",
+  "inputs": [
+    {
+      "name": "anchor",
+      "shape": null,
+      "dtype": "float32"
+    },
+    {
+      "name": "positive",
+      "shape": [
+        32768,
+        8192
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "negative",
+      "shape": [
+        32768,
+        8192
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    A model that computes Triplet Margin Loss for metric learning tasks.\n\n    Parameters:\n        margin (float): The margin between the positive and negative samples.\n    \"\"\"\n    def __init__(self, margin=1.0):\n        super(Model, self).__init__()\n        self.loss_fn = torch.nn.TripletMarginLoss(margin=margin)\n\n    def forward(self, anchor, positive, negative):\n        return self.loss_fn(anchor, positive, negative)\n\nbatch_size = 32768\ninput_shape = (8192,)\ndim = 1\n\ndef get_inputs():\n    scale = torch.rand(())\n    return [torch.rand(batch_size, *input_shape)*scale, torch.rand(batch_size, *input_shape), torch.rand(batch_size, *input_shape)]\n    \ndef get_init_inputs():\n    return [1.0]  # Default margin\n\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/99_tripletmarginloss_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(anchor, positive, negative):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(anchor.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache = _model_cache.to(anchor.device).eval()\n        _model_device = str(anchor.device)\n    return _model_cache(anchor, positive, negative)\n"
+}

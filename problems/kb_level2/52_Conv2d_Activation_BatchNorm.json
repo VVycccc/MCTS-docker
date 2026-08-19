@@ -1,0 +1,24 @@
+{
+  "name": "l2_52_Conv2d_Activation_BatchNorm",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        64,
+        64,
+        128,
+        128
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Simple model that performs a convolution, applies activation, and then applies Batch Normalization.\n    \"\"\"\n    def __init__(self, in_channels, out_channels, kernel_size, eps=1e-5, momentum=0.1):\n        super(Model, self).__init__()\n        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size)\n        self.bn = nn.BatchNorm2d(out_channels, eps=eps, momentum=momentum)\n\n    def forward(self, x):\n        x = self.conv(x)\n        x = torch.multiply(torch.tanh(torch.nn.functional.softplus(x)), x)\n        x = self.bn(x)\n        return x\n\nbatch_size = 64\nin_channels = 64\nout_channels = 128\nheight, width = 128, 128\nkernel_size = 3\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_channels, height, width)]\n\ndef get_init_inputs():\n    return [in_channels, out_channels, kernel_size]\n# Frozen weights (loaded from .pt at module init):\n#   conv.weight: [128, 64, 3, 3] (float32)\n#   conv.bias: [128] (float32)\n#   bn.weight: [128] (float32)\n#   bn.bias: [128] (float32)\n#   bn.running_mean: [128] (float32)\n#   bn.running_var: [128] (float32)\n#   bn.num_batches_tracked: [] (int64)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/52_Conv2d_Activation_BatchNorm_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    bn_bias = _weights['bn.bias']  # [128]\n    bn_num_batches_tracked = _weights['bn.num_batches_tracked']  # []\n    bn_running_mean = _weights['bn.running_mean']  # [128]\n    bn_running_var = _weights['bn.running_var']  # [128]\n    bn_weight = _weights['bn.weight']  # [128]\n    conv_bias = _weights['conv.bias']  # [128]\n    conv_weight = _weights['conv.weight']  # [128, 64, 3, 3]\n\n    x = _torch.nn.functional.conv2d(x, conv_weight, conv_bias)\n    x = _torch.tanh(x)\n    x = _torch.nn.functional.batch_norm(x, running_mean=None, running_var=None, weight=bn_weight, bias=bn_bias, training=True)\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

@@ -1,0 +1,119 @@
+# Direction Probe taxonomy v1
+# Coarse labels for empirical kernel optimization direction probing.
+# `other` is allowed only when no existing direction fits; it must include notes.
+
+directions:
+  tiling_blocking:
+    description: Change tile/block shapes, block sizes, or program/grid mapping.
+    examples:
+      - Change BLOCK_M/BLOCK_N/BLOCK_K or BLOCK_SIZE.
+      - Change tile shape or program_id mapping.
+      - Repartition work across Triton programs.
+    non_examples:
+      - Only changing num_warps without changing tiling; use autotune_parameters or parallelism_occupancy.
+
+  parallelism_occupancy:
+    description: Change parallel decomposition, occupancy, register pressure, or stage/warp-level execution structure.
+    examples:
+      - Split work across more/fewer programs.
+      - Reduce register pressure to improve occupancy.
+      - Change persistent/parallel decomposition.
+    non_examples:
+      - Only changing BLOCK_SIZE; use tiling_blocking.
+
+  memory_access:
+    description: Improve global memory access pattern or reduce memory traffic.
+    examples:
+      - Make loads/stores contiguous or coalesced.
+      - Reduce redundant loads.
+      - Simplify masks around memory operations.
+      - Improve cache-friendly access.
+    non_examples:
+      - Pure mathematical simplification without memory-layout impact; use algorithmic_rewrite.
+
+  vectorization:
+    description: Process multiple contiguous elements per program or use more vectorized load/store patterns.
+    examples:
+      - Increase per-program vector width.
+      - Use tl.arange based vectorized contiguous operations.
+      - Store/load multiple adjacent elements at once.
+    non_examples:
+      - General block-size tuning without a vectorization intent; use tiling_blocking or autotune_parameters.
+
+  reduction_strategy:
+    description: Change how reductions, scans, or accumulations are computed.
+    examples:
+      - Change tl.sum layout or reduction axis blocking.
+      - Use two-stage/split reduction.
+      - Change tree/warp/block reduction strategy.
+    non_examples:
+      - Simple num_warps tuning around an unchanged reduction; use autotune_parameters unless the reduction structure changes.
+
+  fusion_or_fission:
+    description: Fuse operations to remove intermediates or split an overly large fused kernel into simpler kernels.
+    examples:
+      - Fuse elementwise postprocessing into a reduction kernel.
+      - Avoid intermediate tensor materialization.
+      - Split a monolithic kernel when register pressure is too high.
+    non_examples:
+      - Rewriting a single operation's math; use algorithmic_rewrite.
+
+  algorithmic_rewrite:
+    description: Change the algorithm or exploit mathematical equivalence to reduce work.
+    examples:
+      - Replace sort with selection/top-k style logic.
+      - Convert GEMM+sum into a matvec-like computation when equivalent.
+      - Skip provably unnecessary computation.
+      - Use symmetry, monotonicity, or associativity to reduce operations.
+    non_examples:
+      - Parameter tuning of the same algorithm; use autotune_parameters.
+
+  data_layout_indexing:
+    description: Change data-layout handling, strides, pointer arithmetic, or indexing strategy.
+    examples:
+      - Specialize contiguous vs strided layout.
+      - Simplify gather/scatter indexing.
+      - Rewrite transpose/stride arithmetic.
+    non_examples:
+      - Coalescing contiguous loads only; use memory_access if indexing semantics are unchanged.
+
+  specialization_fast_path:
+    description: Add shape/value/layout specialization or a common-case fast path.
+    examples:
+      - Specialize power-of-two shapes.
+      - Add contiguous-layout fast path.
+      - Remove dynamic branches using constexpr/static assumptions.
+      - Add small-size or large-size path.
+    non_examples:
+      - General algorithmic rewrite without a guarded special case; use algorithmic_rewrite.
+
+  precision_dtype:
+    description: Change dtype, accumulation precision, tensor-core usage, or approximate math where correctness allows.
+    examples:
+      - Switch accumulation dtype.
+      - Use fp16/bf16/TF32 path where allowed.
+      - Move casts to reduce overhead.
+    non_examples:
+      - Using tl.dot because the algorithm changed; likely algorithmic_rewrite plus precision_dtype as secondary.
+
+  autotune_parameters:
+    description: Tune kernel parameters without changing the core algorithm or structure.
+    examples:
+      - Change BLOCK_SIZE, num_warps, num_stages, or tile sizes as a parameter sweep.
+      - Try a different static constexpr parameter.
+    non_examples:
+      - Structural tiling redesign; use tiling_blocking.
+
+  correctness_boundary_fix:
+    description: Fix correctness, masking, bounds, tolerance, NaN/Inf, or edge-case behavior.
+    examples:
+      - Fix out-of-bound mask.
+      - Correct boundary condition for irregular shapes.
+      - Fix numerical/tolerance issue.
+    non_examples:
+      - A performance-oriented mask simplification that was already correct; use memory_access or specialization_fast_path.
+
+  other:
+    description: Use only if no listed direction fits. Must include clear notes and changed_items.
+    examples:
+      - A genuinely new direction discovered by the experiment.

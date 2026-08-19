@@ -1,0 +1,30 @@
+{
+  "name": "05_matrix_scalar_multiplication",
+  "op_type": "elementwise",
+  "inputs": [
+    {
+      "name": "A",
+      "shape": [
+        65536,
+        16384
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "s",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        65536,
+        16384
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn.functional\nimport math\n\ndef run(A, s):\n    return A * s"
+}

@@ -1,0 +1,22 @@
+{
+  "name": "l2_75_Gemm_GroupNorm_Min_BiasAdd",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        1024,
+        8192
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Model that performs a GEMM, Group Normalization, Minimum operation, and Bias addition.\n    \"\"\"\n    def __init__(self, in_features, out_features, num_groups, bias_shape):\n        super(Model, self).__init__()\n        self.gemm = nn.Linear(in_features, out_features)\n        self.group_norm = nn.GroupNorm(num_groups, out_features)\n        self.bias = nn.Parameter(torch.randn(bias_shape))\n\n    def forward(self, x):\n        x = self.gemm(x)\n        x = self.group_norm(x)\n        x = torch.min(x, dim=1, keepdim=True)[0] \n        x = x + self.bias\n        return x\n\nbatch_size = 1024\nin_features = 8192\nout_features = 8192\nnum_groups = 512\nbias_shape = (1, out_features, 1, 1)\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_features)]\n\ndef get_init_inputs():\n    return [in_features, out_features, num_groups, bias_shape]\n# Frozen weights (loaded from .pt at module init):\n#   bias: [1, 8192, 1, 1] (float32)\n#   gemm.weight: [8192, 8192] (float32)\n#   gemm.bias: [8192] (float32)\n#   group_norm.weight: [8192] (float32)\n#   group_norm.bias: [8192] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/75_Gemm_GroupNorm_Min_BiasAdd_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    bias = _weights['bias']  # [1, 8192, 1, 1]\n    gemm_bias = _weights['gemm.bias']  # [8192]\n    gemm_weight = _weights['gemm.weight']  # [8192, 8192]\n    group_norm_bias = _weights['group_norm.bias']  # [8192]\n    group_norm_weight = _weights['group_norm.weight']  # [8192]\n\n    x = _torch.nn.functional.linear(x, gemm_weight, gemm_bias)\n    x = _torch.nn.functional.group_norm(x, num_groups=1, weight=group_norm_weight, bias=group_norm_bias)\n    x = _torch.min(x, dim=1, keepdim=True)[0]\n    x = x + bias\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

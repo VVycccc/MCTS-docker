@@ -1,0 +1,31 @@
+{
+  "name": "46_average_pooling_3d",
+  "op_type": "pooling",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        16,
+        32,
+        128,
+        128,
+        256
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        16,
+        32,
+        128,
+        128,
+        256
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Simple model that performs 3D Average Pooling.\n    \"\"\"\n    def __init__(self, kernel_size: int, stride: int = None, padding: int = 0):\n        \"\"\"\n        Initializes the Average Pooling layer.\n\n        Args:\n            kernel_size (int): Size of the kernel to apply pooling.\n            stride (int, optional): Stride of the pooling operation. Defaults to None, which uses the kernel size.\n            padding (int, optional): Padding to apply before pooling. Defaults to 0.\n        \"\"\"\n        super(Model, self).__init__()\n        self.avg_pool = nn.AvgPool3d(kernel_size=kernel_size, stride=stride, padding=padding)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        \"\"\"\n        Applies Average Pooling to the input tensor.\n\n        Args:\n            x (torch.Tensor): Input tensor of shape (batch_size, channels, depth, height, width).\n\n        Returns:\n            torch.Tensor: Output tensor with Average Pooling applied, shape depends on kernel_size, stride and padding.\n        \"\"\"\n        return self.avg_pool(x)\n\nbatch_size = 16\nchannels = 32\ndepth = 128\nheight = 128\nwidth = 256\nkernel_size = 3\nstride = 2\npadding = 1\n\ndef get_inputs():\n    x = torch.rand(batch_size, channels, depth, height, width)\n    return [x]\n\ndef get_init_inputs():\n    return [kernel_size, stride, padding]\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/46_average_pooling_3d_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

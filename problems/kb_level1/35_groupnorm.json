@@ -1,0 +1,29 @@
+{
+  "name": "35_groupnorm",
+  "op_type": "normalization",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        112,
+        64,
+        512,
+        512
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        112,
+        64,
+        512,
+        512
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Simple model that performs Group Normalization.\n    \"\"\"\n    def __init__(self, num_features: int, num_groups: int):\n        \"\"\"\n        Initializes the GroupNorm layer.\n\n        Args:\n            num_features (int): Number of features in the input tensor.\n            num_groups (int): Number of groups to divide the channels into.\n        \"\"\"\n        super(Model, self).__init__()\n        self.gn = nn.GroupNorm(num_groups=num_groups, num_channels=num_features)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        \"\"\"\n        Applies Group Normalization to the input tensor.\n\n        Args:\n            x (torch.Tensor): Input tensor of shape (batch_size, num_features, *).\n\n        Returns:\n            torch.Tensor: Output tensor with Group Normalization applied, same shape as input.\n        \"\"\"\n        return self.gn(x)\n\nbatch_size = 112  # scaled up\nfeatures = 64\nnum_groups = 8\ndim1 = 512\ndim2 = 512\n\ndef get_inputs():\n    x = torch.rand(batch_size, features, dim1, dim2)\n    return [x]\n\ndef get_init_inputs():\n    return [features, num_groups] # num_features\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/35_groupnorm_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

@@ -1,0 +1,42 @@
+# DirecTune-MCTS 典型题集 (model ablation + cross-project comparison)
+# 挑选日期 2026-07-31 | 来源: L1 selected50 (35 成功) + L2 selected30 (25 成功)
+# 标准: triton=Y 可靠 + op 类型覆盖 + 加速比分档 + 单题耗时可控
+# 全部为当前 GLM-5.2 下已验证 triton champion 成功的题
+
+# ===== L1 (12) =====
+# gemm
+02_standard_matrix_multiplication
+03_batched_matrix_multiplication
+14_matmul_for_upper_triangular_matrices
+# elementwise
+88_mingptnewgelu
+26_gelu
+# normalization
+36_rmsnorm
+35_groupnorm
+# pooling
+41_max_pooling_1d
+44_average_pooling_1d
+# reduction
+47_sum_reduction_over_a_dimension
+49_max_reduction_over_a_dimension
+# loss
+100_hingeloss
+
+# ===== L2 (12) =====
+# conv2d fusion
+1_Conv2D_ReLU_BiasAdd
+35_Conv2d_Subtract_HardSwish_MaxPool_Mish
+52_Conv2d_Activation_BatchNorm
+# conv3d fusion
+23_Conv3d_GroupNorm_Mean
+24_Conv3d_Min_Softmax
+# conv-transpose fusion
+11_ConvTranspose2d_BatchNorm_Tanh_MaxPool_GroupNorm
+15_ConvTranspose3d_BatchNorm_Subtract
+# gemm/matmul fusion
+12_Gemm_Multiply_LeakyReLU
+14_Gemm_Divide_Sum_Scaling
+18_Matmul_Sum_Max_AvgPool_LogSumExp_LogSumExp
+29_Matmul_Mish_Mish
+95_Matmul_Add_Swish_Tanh_GELU_Hardtanh

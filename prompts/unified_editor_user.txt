@@ -1,0 +1,18 @@
+分析以下 Triton kernel 的性能瓶颈，并给出增量优化修改指令（search/replace JSON）。
+
+# 问题定义
+{definition_str}
+
+# 基线实现（你要优化的代码）
+{kernel_code}
+
+# 性能 Profile
+{profile}
+
+# 本次优化方向
+{direction_directive}
+
+# 任务
+1. 结合 profile 的硬件指标与上方算子优化知识，定位最值得优化的瓶颈。
+2. 给出精确的 search/replace 修改指令来改善该瓶颈。
+3. 在 change_description 中说明本次改动与预期效果。

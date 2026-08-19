@@ -1,0 +1,31 @@
+{
+  "name": "58_conv_transposed_3d_asymmetric_input_asymmetric_kernel",
+  "op_type": "conv2d",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        16,
+        32,
+        16,
+        32,
+        64
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        16,
+        32,
+        16,
+        32,
+        64
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Performs a transposed 3D convolution operation with asymmetric input and kernel sizes.\n\n    Args:\n        in_channels (int): Number of channels in the input tensor.\n        out_channels (int): Number of channels produced by the convolution.\n        kernel_size (tuple): Tuple of 3 integers representing the kernel size in the form (depth, height, width).\n        stride (tuple, optional): Tuple of 3 integers representing the stride in the form (depth, height, width). Defaults to (1, 1, 1).\n        padding (tuple, optional): Tuple of 3 integers representing the padding in the form (depth, height, width). Defaults to (0, 0, 0).\n        output_padding (tuple, optional): Tuple of 3 integers representing the output padding in the form (depth, height, width). Defaults to (0, 0, 0).\n        groups (int, optional): Number of blocked connections from input channels to output channels. Defaults to 1.\n        bias (bool, optional): If `True`, adds a learnable bias to the output. Defaults to `False`.\n    \"\"\"\n    def __init__(self, in_channels: int, out_channels: int, kernel_size: tuple, stride: tuple = (1, 1, 1), padding: tuple = (0, 0, 0), output_padding: tuple = (0, 0, 0), groups: int = 1, bias: bool = False):\n        super(Model, self).__init__()\n        self.conv_transpose3d = nn.ConvTranspose3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, groups=groups, bias=bias)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        \"\"\"\n        Performs the transposed 3D convolution.\n\n        Args:\n            x (torch.Tensor): Input tensor of shape (batch_size, in_channels, depth_in, height_in, width_in).\n\n        Returns:\n            torch.Tensor: Output tensor of shape (batch_size, out_channels, depth_out, height_out, width_out).\n        \"\"\"\n        return self.conv_transpose3d(x)\n\n# Test code\nbatch_size = 16\nin_channels = 32\nout_channels = 16\nkernel_size = (3, 5, 7)  # Asymmetric kernel size\ndepth_in = 16\nheight_in = 32\nwidth_in = 64\n\ndef get_inputs():\n    x = torch.rand(batch_size, in_channels, depth_in, height_in, width_in)\n    return [x]\n\ndef get_init_inputs():\n    return [in_channels, out_channels, kernel_size]  # Provide in_channels, out_channels, kernel_size for initialization\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/58_conv_transposed_3d_asymmetric_input_asymmetric_kernel_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

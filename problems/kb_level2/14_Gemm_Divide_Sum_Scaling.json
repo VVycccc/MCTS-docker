@@ -1,0 +1,22 @@
+{
+  "name": "l2_14_Gemm_Divide_Sum_Scaling",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        1024,
+        8192
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Model that performs a matrix multiplication, division, summation, and scaling.\n    \"\"\"\n    def __init__(self, input_size, hidden_size, scaling_factor):\n        super(Model, self).__init__()\n        self.weight = nn.Parameter(torch.randn(hidden_size, input_size))\n        self.scaling_factor = scaling_factor\n\n    def forward(self, x):\n        \"\"\"\n        Args:\n            x (torch.Tensor): Input tensor of shape (batch_size, input_size).\n        Returns:\n            torch.Tensor: Output tensor of shape (batch_size, hidden_size).\n        \"\"\"\n        x = torch.matmul(x, self.weight.T)  # Gemm\n        x = x / 2  # Divide\n        x = torch.sum(x, dim=1, keepdim=True) # Sum\n        x = x * self.scaling_factor  # Scaling\n        return x\n\n\nbatch_size   = 1024  \ninput_size   = 8192  \nhidden_size  = 8192 \nscaling_factor = 1.5\n\ndef get_inputs():\n    return [torch.rand(batch_size, input_size)]\n\ndef get_init_inputs():\n    return [input_size, hidden_size, scaling_factor]\n# Frozen weights (loaded from .pt at module init):\n#   weight: [8192, 8192] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/14_Gemm_Divide_Sum_Scaling_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    weight = _weights['weight']  # [8192, 8192]\n\n    x = _torch.matmul(x, weight.T)\n    x = x / 2  # Divide\n    x = _torch.sum(x, dim=1, keepdim=True) # Sum\n    x = x * 1.5  # Scaling\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

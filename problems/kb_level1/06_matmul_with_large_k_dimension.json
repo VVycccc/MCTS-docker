@@ -1,0 +1,33 @@
+{
+  "name": "06_matmul_with_large_k_dimension",
+  "op_type": "gemm",
+  "inputs": [
+    {
+      "name": "A",
+      "shape": [
+        256,
+        524288
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "B",
+      "shape": [
+        524288,
+        256
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        256,
+        524288
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn.functional\nimport math\n\ndef run(A, B):\n    return torch.matmul(A, B)"
+}

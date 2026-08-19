@@ -1,0 +1,25 @@
+{
+  "name": "l2_13_ConvTranspose3d_Mean_Add_Softmax_Tanh_Scaling",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        16,
+        16,
+        32,
+        128,
+        128
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Model that performs a series of operations:\n    1. Transposed 3D convolution\n    2. Mean pooling (across depth)\n    3. Addition\n    4. Softmax (across channels)\n    5. Tanh activation\n    6. Scaling\n    \"\"\"\n    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, scaling_factor):\n        super(Model, self).__init__()\n        self.conv_transpose = nn.ConvTranspose3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)\n        self.bias = nn.Parameter(torch.randn(1, out_channels, 1, 1, 1))  # Broadcastable bias over channels\n        self.scaling_factor = scaling_factor\n\n    def forward(self, x):\n        x = self.conv_transpose(x)                            # (B, C, D, H, W)\n        x = x.mean(dim=2, keepdim=True)                       # Mean pool over depth dim (D)\n        x = x + self.bias                                     # Bias add per channel\n        x = torch.softmax(x, dim=1)                           # Softmax over channels\n        x = torch.tanh(x)                                     # Nonlinearity\n        x = x * self.scaling_factor                           # Scaling\n        return x\n\n# === Test config ===\nbatch_size = 16\nin_channels  = 16  \nout_channels = 64  \ndepth = 32; height = width = 128  \nkernel_size  = 3\nstride       = 1  \npadding = 1\nscaling_factor = 2.0\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_channels, depth, height, width)]\n\ndef get_init_inputs():\n    return [in_channels, out_channels, kernel_size, stride, padding, scaling_factor]\n\n# Frozen weights (loaded from .pt at module init):\n#   bias: [1, 64, 1, 1, 1] (float32)\n#   conv_transpose.weight: [16, 64, 3, 3, 3] (float32)\n#   conv_transpose.bias: [64] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/13_ConvTranspose3d_Mean_Add_Softmax_Tanh_Scaling_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    bias = _weights['bias']  # [1, 64, 1, 1, 1]\n    conv_transpose_bias = _weights['conv_transpose.bias']  # [64]\n    conv_transpose_weight = _weights['conv_transpose.weight']  # [16, 64, 3, 3, 3]\n\n    x = _torch.nn.functional.conv_transpose3d(x, conv_transpose_weight, conv_transpose_bias)\n    x = x + bias                                     # Bias add per channel\n    x = _torch.softmax(x, dim=-1)\n    x = _torch.tanh(x)\n    x = x * 2.0                           # Scaling\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

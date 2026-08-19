@@ -1,0 +1,25 @@
+{
+  "name": "l2_89_ConvTranspose3d_MaxPool_Softmax_Subtract_Swish_Max",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        128,
+        3,
+        16,
+        32,
+        32
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    A model that performs a sequence of operations:\n        - ConvTranspose3d\n        - MaxPool3d\n        - Softmax\n        - Subtract\n        - Swish\n        - Max\n    \"\"\"\n    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, output_padding, pool_kernel_size, pool_stride, pool_padding):\n        super(Model, self).__init__()\n        self.conv_transpose = nn.ConvTranspose3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding)\n        self.max_pool = nn.MaxPool3d(kernel_size=pool_kernel_size, stride=pool_stride, padding=pool_padding)\n        self.subtract = nn.Parameter(torch.randn(out_channels)) # Assuming subtraction is element-wise across channels\n\n    def forward(self, x):\n        x = self.conv_transpose(x)\n        x = self.max_pool(x)\n        x = torch.softmax(x, dim=1) # Apply softmax across channels (dim=1)\n        x = x - self.subtract.view(1, -1, 1, 1, 1) # Subtract across channels\n        x = torch.sigmoid(x) * x # Swish activation\n        x = torch.max(x, dim=1)[0] # Max pooling across channels\n        return x\n\nbatch_size = 128\nin_channels = 3\nout_channels = 16\ndepth, height, width = 16, 32, 32\nkernel_size = 3\nstride = 2\npadding = 1\noutput_padding = 1\npool_kernel_size = 2\npool_stride = 2\npool_padding = 0\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_channels, depth, height, width)]\n\ndef get_init_inputs():\n    return [in_channels, out_channels, kernel_size, stride, padding, output_padding, pool_kernel_size, pool_stride, pool_padding]\n# Frozen weights (loaded from .pt at module init):\n#   subtract: [16] (float32)\n#   conv_transpose.weight: [3, 16, 3, 3, 3] (float32)\n#   conv_transpose.bias: [16] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/89_ConvTranspose3d_MaxPool_Softmax_Subtract_Swish_Max_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    conv_transpose_bias = _weights['conv_transpose.bias']  # [16]\n    conv_transpose_weight = _weights['conv_transpose.weight']  # [3, 16, 3, 3, 3]\n    subtract = _weights['subtract']  # [16]\n\n    x = _torch.nn.functional.conv_transpose3d(x, conv_transpose_weight, conv_transpose_bias)\n    x = _torch.nn.functional.max_pool3d(x, kernel_size=2)\n    x = _torch.softmax(x, dim=-1)\n    x = x - subtract.view(1, -1, 1, 1, 1) # Subtract across channels\n    x = _torch.sigmoid(x)\n    x = _torch.max(x, dim=1)[0] # Max pooling across channels\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

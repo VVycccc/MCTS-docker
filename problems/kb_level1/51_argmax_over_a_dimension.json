@@ -1,0 +1,27 @@
+{
+  "name": "51_argmax_over_a_dimension",
+  "op_type": "reduction",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        128,
+        4096,
+        4095
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        128,
+        4096,
+        4095
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Simple model that performs Argmax over a specified dimension.\n    \"\"\"\n    def __init__(self, dim: int):\n        \"\"\"\n        Initializes the model with the dimension to perform argmax.\n\n        Args:\n            dim (int): The dimension to perform argmax over.\n        \"\"\"\n        super(Model, self).__init__()\n        self.dim = dim\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        \"\"\"\n        Applies argmax over the specified dimension to the input tensor.\n\n        Args:\n            x (torch.Tensor): Input tensor.\n\n        Returns:\n            torch.Tensor: Output tensor with argmax applied, with the specified dimension removed.\n        \"\"\"\n        return torch.argmax(x, dim=self.dim)\n\nbatch_size = 128\ndim1 = 4096\ndim2 = 4095\n\ndef get_inputs():\n    x = torch.rand(batch_size, dim1, dim2)\n    return [x]\n\ndef get_init_inputs():\n    return [1]\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/51_argmax_over_a_dimension_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

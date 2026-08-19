@@ -1,0 +1,22 @@
+# L1 problems already registered in experiment reports; treat as already run for new clean L1 sweeps.
+# Sources:
+# - /home/wangyichen/DirecTune-MCTS/output/full_mcts/EXPERIMENT_REPORT.md
+# - /home/wangyichen/DirecTune-MCTS/output/full_mcts/SUCCESS_RESULTS_REPORT.md
+01_square_matrix_multiplication
+06_matmul_with_large_k_dimension
+16_matmul_with_transposed_a
+17_matmul_with_transposed_b
+19_relu
+23_softmax
+24_logsoftmax
+33_batchnorm
+40_layernorm
+42_max_pooling_2d
+50_conv_standard_2d_square_input_square_kernel
+57_conv_transposed_2d_square_input_square_kernel
+88_mingptnewgelu
+89_cumsum
+90_cumprod
+94_mseloss
+97_scaleddotproductattention
+98_kldivloss

@@ -1,0 +1,37 @@
+{
+  "name": "11_4d_tensor_matrix_multiplication",
+  "op_type": "gemm",
+  "inputs": [
+    {
+      "name": "A",
+      "shape": [
+        8,
+        256,
+        512,
+        256
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "B",
+      "shape": [
+        256,
+        768
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        8,
+        256,
+        512,
+        256
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Performs 4D tensor-matrix multiplication: \n        C[b, i, j, k] = sum_l A[b, i, j, l] * B[l, k]\n\n    Args:\n        A (torch.Tensor): Input 4D tensor of shape (b, i, j, l)\n        B (torch.Tensor): Input matrix of shape (l, k)\n\n    Returns:\n        torch.Tensor: Output 4D tensor of shape (b, i, j, k)\n    \"\"\"\n    def __init__(self):\n        super(Model, self).__init__()\n\n    def forward(self, A, B):\n        \"\"\"\n        Performs the 4D tensor-matrix multiplication.\n\n        Args:\n            A (torch.Tensor): Input 4D tensor of shape (b, i, j, l)\n            B (torch.Tensor): Input matrix of shape (l, k)\n\n        Returns:\n            torch.Tensor: Output 4D tensor of shape (b, i, j, k)\n        \"\"\"\n        return torch.einsum(\"bijl,lk->bijk\", A, B)\n\n# Test code\nb = 8\ni = 256\nj = 512\nl = 256\nk = 768\n\ndef get_inputs():\n    A = torch.rand(b, i, j, l)\n    B = torch.rand(l, k)\n    return [A, B]\n\ndef get_init_inputs():\n    return []  # No special initialization inputs needed\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/11_4d_tensor_matrix_multiplication_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(A, B):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(A.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache = _model_cache.to(A.device).eval()\n        _model_device = str(A.device)\n    return _model_cache(A, B)\n"
+}

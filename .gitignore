@@ -1,0 +1,36 @@
+output/
+__pycache__/
+*.pyc
+# KernelBench weights: L2/L3 .pt are huge (24GB) — excluded; L1 .pt (38MB) ships with repo
+problems/kb_level2/*.pt
+problems/kb_level3/
+
+# Persistence layer (cross-run accumulated direction stats, TODO-1)
+direction_stats.json
+
+# Local LLM/API configs (may contain API keys)
+config*.yaml
+!config*.example.yaml
+.env
+.env.*
+
+# AKG frontend config (contains API keys)
+.akg/settings.json
+akg_frontend/akg_agents/op/autoresearch/agent/api_config.yaml
+
+# AKG runtime logs
+akg_agents_logs/
+
+# Python artifacts
+*.egg-info/
+dist/
+build/
+
+# Docker build staging & exports
+.build/
+*.tar.gz
+
+# misc local logs
+*.log
+output_*.log
+.backup_pre_deakg/

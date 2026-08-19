@@ -1,0 +1,22 @@
+{
+  "name": "l2_66_Matmul_Dropout_Softmax",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        128,
+        16384
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    A model that performs matrix multiplication, applies dropout, and then applies softmax.\n    \"\"\"\n    def __init__(self, in_features, out_features, dropout_p):\n        super(Model, self).__init__()\n        self.matmul = nn.Linear(in_features, out_features)\n        self.dropout = nn.Dropout(dropout_p)\n\n    def forward(self, x):\n        \"\"\"\n        Args:\n            x (torch.Tensor): Input tensor of shape (batch_size, in_features).\n\n        Returns:\n            torch.Tensor: Output tensor of shape (batch_size, out_features).\n        \"\"\"\n        x = self.matmul(x)\n        x = self.dropout(x)\n        x = torch.softmax(x, dim=1)  # Softmax over features\n        return x\n\nbatch_size = 128\nin_features = 16384\nout_features = 16384\ndropout_p = 0.2\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_features)]\n\ndef get_init_inputs():\n    return [in_features, out_features, dropout_p]\n\n# Frozen weights (loaded from .pt at module init):\n#   matmul.weight: [16384, 16384] (float32)\n#   matmul.bias: [16384] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/66_Matmul_Dropout_Softmax_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    matmul_bias = _weights['matmul.bias']  # [16384]\n    matmul_weight = _weights['matmul.weight']  # [16384, 16384]\n\n    x = _torch.nn.functional.linear(x, matmul_weight, matmul_bias)\n    x = _torch.softmax(x, dim=-1)\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

@@ -1,0 +1,24 @@
+{
+  "name": "15_matmul_for_lower_triangular_matrices",
+  "op_type": "gemm",
+  "inputs": [
+    {
+      "name": "A",
+      "shape": null,
+      "dtype": "float32"
+    },
+    {
+      "name": "B",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Simple model that performs a matrix multiplication (C = A * B) where A and B are lower triangular matrices. \n    \"\"\"\n    def __init__(self):\n        super(Model, self).__init__()\n    \n    def forward(self, A, B):\n        \"\"\"\n        Performs matrix multiplication of lower triangular matrices A and B.\n\n        Args:\n            A (torch.Tensor): Lower triangular matrix of shape (N, N).\n            B (torch.Tensor): Lower triangular matrix of shape (N, N).\n\n        Returns:\n            torch.Tensor: The result of matrix multiplication C of shape (N, N).\n        \"\"\"\n        return torch.tril(torch.matmul(A, B))\n\nM = 4096\n\ndef get_inputs():\n    A = torch.rand(M, M)\n    B = torch.rand(M, M)\n    A = torch.tril(A)\n    B = torch.tril(B)\n    return [A, B]\n\ndef get_init_inputs():\n    return []  # No special initialization inputs needed\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/15_matmul_for_lower_triangular_matrices_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(A, B):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(A.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache = _model_cache.to(A.device).eval()\n        _model_device = str(A.device)\n    return _model_cache(A, B)\n"
+}

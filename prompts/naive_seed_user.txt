@@ -1,0 +1,15 @@
+请为以下算子生成一个**最朴素的 Triton seed kernel**（不优化，只求正确）。
+
+# 参考实现（PyTorch，用于理解计算逻辑）
+```python
+{kernel_code}
+```
+
+# 算子类型
+{op_type}
+
+# 任务
+按系统提示的朴素约束，写出 `@triton.jit` kernel + `def run(...)` 入口。
+- 接口签名与参考的 `def run` / `def forward` 完全一致
+- BLOCK 用 32 或 64，不用 TC/autotune/融合/num_stages
+- 只输出一个 ```python 代码块

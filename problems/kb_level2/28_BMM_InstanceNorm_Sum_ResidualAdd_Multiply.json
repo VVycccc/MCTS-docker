@@ -1,0 +1,22 @@
+{
+  "name": "l2_28_BMM_InstanceNorm_Sum_ResidualAdd_Multiply",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        1024,
+        8192
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Model that performs a batch matrix multiplication, instance normalization, summation, residual addition, and multiplication.\n    \"\"\"\n    def __init__(self, in_features, out_features, eps=1e-5, momentum=0.1):\n        super(Model, self).__init__()\n        self.bmm = nn.Linear(in_features, out_features)\n        self.instance_norm = nn.InstanceNorm2d(out_features, eps=eps, momentum=momentum)\n\n    def forward(self, x, y):\n        \"\"\"\n        Args:\n            x (torch.Tensor): Input tensor of shape (batch_size, in_features).\n            y (torch.Tensor): Input tensor of shape (batch_size, out_features).\n\n        Returns:\n            torch.Tensor: Output tensor of shape (batch_size, out_features).\n        \"\"\"\n        x = self.bmm(x)\n        x = self.instance_norm(x.unsqueeze(1).unsqueeze(1)).squeeze(1).squeeze(1)\n        x = x + y\n        x = x * y\n        return x\n\nbatch_size = 1024  # Increased batch size\nin_features = 8192  # Increased input features\nout_features = 8192  # Increased output features\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_features), torch.rand(batch_size, out_features)]\n\ndef get_init_inputs():\n    return [in_features, out_features]\n# Frozen weights (loaded from .pt at module init):\n#   bmm.weight: [8192, 8192] (float32)\n#   bmm.bias: [8192] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/28_BMM_InstanceNorm_Sum_ResidualAdd_Multiply_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    bmm_bias = _weights['bmm.bias']  # [8192]\n    bmm_weight = _weights['bmm.weight']  # [8192, 8192]\n\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

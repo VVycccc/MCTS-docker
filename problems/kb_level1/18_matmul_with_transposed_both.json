@@ -1,0 +1,33 @@
+{
+  "name": "18_matmul_with_transposed_both",
+  "op_type": "gemm",
+  "inputs": [
+    {
+      "name": "A",
+      "shape": [
+        8192,
+        2048
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "B",
+      "shape": [
+        4096,
+        8192
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        8192,
+        2048
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Simple model that performs a single matrix multiplication (C = A * B)\n    \"\"\"\n    def __init__(self):\n        super(Model, self).__init__()\n    \n    def forward(self, A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:\n        \"\"\"\n        Performs matrix multiplication.\n\n        Args:\n            A: Input tensor of shape (M, K).\n            B: Input tensor of shape (K, N).\n\n        Returns:\n            Output tensor of shape (M, N).\n        \"\"\"\n        return torch.matmul(A.T, B.T)\n\nM = 1024 * 2\nK = 4096 * 2\nN = 2048 * 2\n\ndef get_inputs():\n    A = torch.rand(K, M)\n    B = torch.rand(N, K)\n    return [A, B]\n\ndef get_init_inputs():\n    return []  # No special initialization inputs needed\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/18_matmul_with_transposed_both_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(A, B):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(A.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache = _model_cache.to(A.device).eval()\n        _model_device = str(A.device)\n    return _model_cache(A, B)\n"
+}

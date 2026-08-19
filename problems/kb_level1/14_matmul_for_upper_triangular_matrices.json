@@ -1,0 +1,24 @@
+{
+  "name": "14_matmul_for_upper_triangular_matrices",
+  "op_type": "gemm",
+  "inputs": [
+    {
+      "name": "A",
+      "shape": null,
+      "dtype": "float32"
+    },
+    {
+      "name": "B",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Simple model that performs matrix multiplication (C = A * B) for upper triangular matrices.\n    \"\"\"\n    def __init__(self):\n        super(Model, self).__init__()\n    \n    def forward(self, A, B):\n        \"\"\"\n        Performs matrix multiplication for upper triangular matrices.\n\n        Args:\n            A (torch.Tensor): Upper triangular matrix of shape (N, N).\n            B (torch.Tensor): Upper triangular matrix of shape (N, N).\n\n        Returns:\n            torch.Tensor: The product of A and B, also an upper triangular matrix of shape (N, N).\n        \"\"\"\n        return torch.triu(torch.matmul(A, B))\n\nN = 4096\n\ndef get_inputs():\n    \"\"\"\n    Generates upper triangular matrices for testing.\n\n    Returns:\n        list: A list containing two upper triangular matrices of shape (N, N).\n    \"\"\"\n    A = torch.triu(torch.rand(N, N))\n    B = torch.triu(torch.rand(N, N))\n    return [A, B]\n\ndef get_init_inputs():\n    \"\"\"\n    No specific initialization inputs are needed for this model.\n\n    Returns:\n        list: An empty list.\n    \"\"\"\n    return []\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/14_matmul_for_upper_triangular_matrices_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(A, B):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(A.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache = _model_cache.to(A.device).eval()\n        _model_device = str(A.device)\n    return _model_cache(A, B)\n"
+}

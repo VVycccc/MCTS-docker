@@ -1,0 +1,22 @@
+{
+  "name": "l2_12_Gemm_Multiply_LeakyReLU",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        1024,
+        8192
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Simple model that performs a Gemm, multiplies the result, and applies LeakyReLU.\n    \"\"\"\n    def __init__(self, in_features, out_features, multiplier, negative_slope):\n        super(Model, self).__init__()\n        self.gemm = nn.Linear(in_features, out_features)\n        self.multiplier = multiplier\n        self.leaky_relu = nn.LeakyReLU(negative_slope)\n\n    def forward(self, x):\n        x = self.gemm(x)\n        x = x * self.multiplier\n        x = self.leaky_relu(x)\n        return x\n\nbatch_size = 1024\nin_features  = 8192  \nout_features = 8192\nmultiplier = 2.0\nnegative_slope = 0.1\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_features)]\n\ndef get_init_inputs():\n    return [in_features, out_features, multiplier, negative_slope]\n# Frozen weights (loaded from .pt at module init):\n#   gemm.weight: [8192, 8192] (float32)\n#   gemm.bias: [8192] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/12_Gemm_Multiply_LeakyReLU_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    gemm_bias = _weights['gemm.bias']  # [8192]\n    gemm_weight = _weights['gemm.weight']  # [8192, 8192]\n\n    x = _torch.nn.functional.linear(x, gemm_weight, gemm_bias)\n    x = x * 2.0\n    x = _torch.nn.functional.leaky_relu(x)\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

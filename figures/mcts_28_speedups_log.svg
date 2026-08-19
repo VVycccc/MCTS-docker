@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="976" viewBox="0 0 1180 976">
+<rect width="100%" height="100%" fill="#fcfcfb"/>
+<style>
+text{font-family:Inter,Arial,Helvetica,sans-serif;fill:#1f2933} .small{font-size:12px}.label{font-size:13px}.title{font-size:22px;font-weight:700}.subtitle{font-size:13px;fill:#64748b}.level{font-size:12px;font-weight:700;fill:#64748b;letter-spacing:.04em}.tick{font-size:11px;fill:#64748b}.value{font-size:10.5px;fill:#475569}.missing{font-size:11px;fill:#9ca3af}.legend{font-size:12px;fill:#334155}
+</style>
+<text x="230" y="34" class="title">DirecTune-MCTS speedups across 28 problems</text>
+<text x="230" y="58" class="subtitle">Log-scale x-axis; vertical reference line marks 1×. Missing points indicate no final champion.</text>
+<circle cx="850" cy="30" r="5" fill="#0072B2"/>
+<text x="862" y="34" class="legend">vs naive seed</text>
+<circle cx="995" cy="30" r="5" fill="#D55E00"/>
+<text x="1007" y="34" class="legend">vs PyTorch</text>
+<line x1="254.80" y1="74" x2="254.80" y2="906" stroke="#e5e7eb" stroke-width="1" opacity="1"/>
+<text x="254.80" y="928" text-anchor="middle" class="tick">0.1×</text>
+<line x1="331.82" y1="74" x2="331.82" y2="906" stroke="#e5e7eb" stroke-width="1" opacity="0.55"/>
+<text x="331.82" y="928" text-anchor="middle" class="tick">0.2×</text>
+<line x1="433.64" y1="74" x2="433.64" y2="906" stroke="#e5e7eb" stroke-width="1" opacity="0.55"/>
+<text x="433.64" y="928" text-anchor="middle" class="tick">0.5×</text>
+<line x1="510.66" y1="74" x2="510.66" y2="906" stroke="#cbd5e1" stroke-width="1.5" opacity="1"/>
+<text x="510.66" y="928" text-anchor="middle" class="tick">1×</text>
+<line x1="587.68" y1="74" x2="587.68" y2="906" stroke="#e5e7eb" stroke-width="1" opacity="0.55"/>
+<text x="587.68" y="928" text-anchor="middle" class="tick">2×</text>
+<line x1="689.50" y1="74" x2="689.50" y2="906" stroke="#e5e7eb" stroke-width="1" opacity="0.55"/>
+<text x="689.50" y="928" text-anchor="middle" class="tick">5×</text>
+<line x1="766.52" y1="74" x2="766.52" y2="906" stroke="#e5e7eb" stroke-width="1" opacity="1"/>
+<text x="766.52" y="928" text-anchor="middle" class="tick">10×</text>
+<line x1="843.55" y1="74" x2="843.55" y2="906" stroke="#e5e7eb" stroke-width="1" opacity="0.55"/>
+<text x="843.55" y="928" text-anchor="middle" class="tick">20×</text>
+<line x1="945.36" y1="74" x2="945.36" y2="906" stroke="#e5e7eb" stroke-width="1" opacity="0.55"/>
+<text x="945.36" y="928" text-anchor="middle" class="tick">50×</text>
+<line x1="1022.39" y1="74" x2="1022.39" y2="906" stroke="#e5e7eb" stroke-width="1" opacity="1"/>
+<text x="1022.39" y="928" text-anchor="middle" class="tick">100×</text>
+<line x1="1099.41" y1="74" x2="1099.41" y2="906" stroke="#e5e7eb" stroke-width="1" opacity="0.55"/>
+<text x="1099.41" y="928" text-anchor="middle" class="tick">200×</text>
+<text x="230" y="958" text-anchor="middle" class="tick">slower</text>
+<text x="510.66" y="958" text-anchor="middle" class="tick">1×</text>
+<text x="1110" y="958" text-anchor="middle" class="tick">faster</text>
+<text x="40" y="81" class="level">L1</text>
+<text x="40" y="603" class="level">L2</text>
+<line x1="35" y1="588.00" x2="1110" y2="588.00" stroke="#d1d5db" stroke-dasharray="4 5"/>
+<rect x="32" y="78" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="96" text-anchor="start" class="label">01_matmul</text>
+<line x1="698.46" y1="92" x2="616.84" y2="92" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="698.46" cy="87" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="616.84" cy="97" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="124" text-anchor="start" class="label">17_matmul_tb</text>
+<line x1="529.99" y1="120" x2="570.27" y2="120" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="529.99" cy="115" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="570.27" cy="125" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="32" y="134" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="152" text-anchor="start" class="label">19_relu</text>
+<line x1="586.57" y1="148" x2="510.66" y2="148" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="586.57" cy="143" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="510.66" cy="153" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="180" text-anchor="start" class="label">88_mingptnewgelu</text>
+<line x1="537.22" y1="176" x2="754.57" y2="176" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="537.22" cy="171" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="754.57" cy="181" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="32" y="190" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="208" text-anchor="start" class="label">23_softmax</text>
+<line x1="602.73" y1="204" x2="539.81" y2="204" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="602.73" cy="199" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="539.81" cy="209" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="236" text-anchor="start" class="label">24_logsoftmax</text>
+<line x1="601.75" y1="232" x2="539.81" y2="232" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="601.75" cy="227" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="539.81" cy="237" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="32" y="246" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="264" text-anchor="start" class="label">33_batchnorm</text>
+<line x1="552.71" y1="260" x2="513.94" y2="260" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="552.71" cy="255" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="513.94" cy="265" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="292" text-anchor="start" class="label">40_layernorm</text>
+<line x1="960.57" y1="288" x2="691.48" y2="288" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="960.57" cy="283" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<text x="952.57" y="286" text-anchor="end" class="value">57.3×</text>
+<circle cx="691.48" cy="293" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="699.48" y="296" text-anchor="start" class="value">5.09×</text>
+<rect x="32" y="302" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="320" text-anchor="start" class="label">89_cumsum</text>
+<line x1="575.97" y1="316" x2="536.34" y2="316" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="575.97" cy="311" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="536.34" cy="321" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="348" text-anchor="start" class="label">90_cumprod</text>
+<line x1="876.69" y1="344" x2="536.34" y2="344" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="876.69" cy="339" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<text x="884.69" y="342" text-anchor="start" class="value">26.9×</text>
+<circle cx="536.34" cy="349" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="32" y="358" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="376" text-anchor="start" class="label">50_conv2d</text>
+<line x1="750.15" y1="372" x2="526.19" y2="372" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="750.15" cy="367" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="526.19" cy="377" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="404" text-anchor="start" class="label">57_convT2d</text>
+<line x1="510.66" y1="400" x2="230.00" y2="400" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="510.66" cy="395" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<text x="518.66" y="398" text-anchor="start" class="value">1.00×</text>
+<circle cx="230.00" cy="405" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="238.00" y="408" text-anchor="start" class="value">0.08×</text>
+<rect x="32" y="414" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="432" text-anchor="start" class="label">42_maxpool</text>
+<line x1="611.14" y1="428" x2="596.75" y2="428" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="611.14" cy="423" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="596.75" cy="433" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="460" text-anchor="start" class="label">45_avgpool</text>
+<text x="518.66" y="460" class="missing">missing final</text>
+<rect x="32" y="470" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="488" text-anchor="start" class="label">98_kldivloss</text>
+<line x1="510.66" y1="484" x2="510.66" y2="484" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="510.66" cy="479" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="510.66" cy="489" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="516" text-anchor="start" class="label">16_matmul_tA</text>
+<line x1="602.73" y1="512" x2="538.96" y2="512" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="602.73" cy="507" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="538.96" cy="517" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="32" y="526" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="544" text-anchor="start" class="label">97_sdpa</text>
+<line x1="510.66" y1="540" x2="313.76" y2="540" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="510.66" cy="535" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<text x="518.66" y="538" text-anchor="start" class="value">1.00×</text>
+<circle cx="313.76" cy="545" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="321.76" y="548" text-anchor="start" class="value">0.17×</text>
+<text x="42" y="572" text-anchor="start" class="label">94_mseloss</text>
+<line x1="510.66" y1="568" x2="510.66" y2="568" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="510.66" cy="563" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="510.66" cy="573" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="32" y="600" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="618" text-anchor="start" class="label">9_Matmul</text>
+<line x1="814.79" y1="614" x2="641.29" y2="614" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="814.79" cy="609" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<text x="822.79" y="612" text-anchor="start" class="value">15.4×</text>
+<circle cx="641.29" cy="619" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="646" text-anchor="start" class="label">76_Gemm</text>
+<line x1="680.48" y1="642" x2="645.00" y2="642" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="680.48" cy="637" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="645.00" cy="647" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="32" y="656" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="674" text-anchor="start" class="label">30_Gemm</text>
+<line x1="736.61" y1="670" x2="736.61" y2="670" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="736.61" cy="665" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="736.61" cy="675" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="702" text-anchor="start" class="label">1_Conv2D</text>
+<line x1="833.92" y1="698" x2="526.19" y2="698" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="833.92" cy="693" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<text x="841.92" y="696" text-anchor="start" class="value">18.3×</text>
+<circle cx="526.19" cy="703" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="32" y="712" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="730" text-anchor="start" class="label">85_Conv</text>
+<text x="518.66" y="730" class="missing">missing final</text>
+<text x="42" y="758" text-anchor="start" class="label">5_ConvT</text>
+<line x1="510.66" y1="754" x2="510.66" y2="754" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="510.66" cy="749" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="510.66" cy="759" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<rect x="32" y="768" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="786" text-anchor="start" class="label">15_ConvT3d</text>
+<line x1="534.56" y1="782" x2="534.56" y2="782" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="534.56" cy="777" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="534.56" cy="787" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="814" text-anchor="start" class="label">18_Matmul</text>
+<line x1="1104.35" y1="810" x2="1065.94" y2="810" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="1104.35" cy="805" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<text x="1096.35" y="808" text-anchor="end" class="value">209×</text>
+<circle cx="1065.94" cy="815" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="1057.94" y="818" text-anchor="end" class="value">148×</text>
+<rect x="32" y="824" width="1088" height="28" fill="#f8fafc" opacity="0.55" rx="5"/>
+<text x="42" y="842" text-anchor="start" class="label">99_Matmul</text>
+<line x1="565.63" y1="838" x2="565.63" y2="838" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="565.63" cy="833" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="565.63" cy="843" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="42" y="870" text-anchor="start" class="label">62_Matmul</text>
+<line x1="647.30" y1="866" x2="647.30" y2="866" stroke="#94a3b8" stroke-width="1.2" opacity="0.55"/>
+<circle cx="647.30" cy="861" r="5.2" fill="#0072B2" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="647.30" cy="871" r="5.2" fill="#D55E00" stroke="#fcfcfb" stroke-width="2"/>
+<text x="670.0" y="958" text-anchor="middle" class="subtitle">Speedup factor, log scale</text>
+<text x="1110" y="958" text-anchor="end" class="subtitle">Data: MCTS_28_SPEEDUPS.md</text>
+</svg>

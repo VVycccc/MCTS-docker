@@ -1,0 +1,25 @@
+{
+  "name": "91_cumsum_reverse",
+  "op_type": "scan",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        32768,
+        32768
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": [
+        32768,
+        32768
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    A model that performs a reverse cumulative sum operation along a specified dimension.\n\n    Parameters:\n        dim (int): The dimension along which to perform the reverse cumulative sum.\n    \"\"\"\n\n    def __init__(self, dim):\n        super(Model, self).__init__()\n        self.dim = dim\n\n    def forward(self, x):\n        return torch.cumsum(x.flip(self.dim), dim=self.dim).flip(self.dim)\n\nbatch_size = 32768\ninput_shape = (32768,)\ndim = 1\n\ndef get_inputs():\n    return [torch.rand(batch_size, *input_shape)]\n\ndef get_init_inputs():\n    return [dim]\n\n\n# --- EXPANDED REFERENCE ---\n# run() 调用原始 Model.forward()（PyTorch 算，正确）。\n# 写 Triton kernel 时：不要照抄 nn.Module，用 torch 实现（有权重则从 _weights_path 加载并缓存）。\nimport torch as _torch\n_weights_path = \"problems/kb_level1/91_cumsum_reverse_weights.pt\"\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}

@@ -1,0 +1,25 @@
+{
+  "name": "l2_49_ConvTranspose3d_Softmax_Sigmoid",
+  "op_type": "fusion",
+  "inputs": [
+    {
+      "name": "x",
+      "shape": [
+        16,
+        32,
+        16,
+        32,
+        32
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output",
+      "shape": null,
+      "dtype": "float32"
+    }
+  ],
+  "reference": "import torch\nimport torch.nn as nn\n\nclass Model(nn.Module):\n    \"\"\"\n    Model that performs a 3D transposed convolution, applies Softmax and Sigmoid.\n    \"\"\"\n    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, output_padding, bias=True):\n        super(Model, self).__init__()\n        self.conv_transpose = nn.ConvTranspose3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, bias=bias)\n        self.softmax = nn.Softmax(dim=1)\n        self.sigmoid = nn.Sigmoid()\n\n    def forward(self, x):\n        \"\"\"\n        Args:\n            x (torch.Tensor): Input tensor of shape (batch_size, in_channels, D, H, W).\n\n        Returns:\n            torch.Tensor: Output tensor of shape (batch_size, out_channels, D, H, W).\n        \"\"\"\n        x = self.conv_transpose(x)\n        x = self.softmax(x)\n        x = self.sigmoid(x)\n        return x\n\nbatch_size = 16\nin_channels = 32\nout_channels = 64\nD, H, W = 16, 32, 32\nkernel_size = 3\nstride = 2\npadding = 1\noutput_padding = 1\n\ndef get_inputs():\n    return [torch.rand(batch_size, in_channels, D, H, W)]\n\ndef get_init_inputs():\n    return [in_channels, out_channels, kernel_size, stride, padding, output_padding]\n# Frozen weights (loaded from .pt at module init):\n#   conv_transpose.weight: [32, 64, 3, 3, 3] (float32)\n#   conv_transpose.bias: [64] (float32)\n\n# --- EXPANDED REFERENCE (函数式，给 LLM 看) ---\n# Model.forward() 的函数式展开（_weights + _torch.nn.functional.*）。\n# LLM 写 Triton 时参考此函数式写法（torch.load(_weights_path) + 缓存 + 函数式计算）。\n# 验证用下方的 run()（通用，调 Model），不要照抄 nn.Module。\n\nimport torch as _torch\n_weights_path = \"/home/wangyichen/DirecTune/problems/kb_level2/49_ConvTranspose3d_Softmax_Sigmoid_weights.pt\"\n_weights = None\n_device = None\n\ndef _init_weights(device):\n    global _weights, _device\n    _weights = {k: v.to(device) for k, v in _torch.load(_weights_path, map_location='cpu', weights_only=True).items()}\n\ndef ref_expanded(x):\n    if _weights is None or str(next(iter(_weights.values())).device) != str(x.device):\n        _init_weights(x.device)\n    conv_transpose_bias = _weights['conv_transpose.bias']  # [64]\n    conv_transpose_weight = _weights['conv_transpose.weight']  # [32, 64, 3, 3, 3]\n\n    x = _torch.nn.functional.conv_transpose3d(x, conv_transpose_weight, conv_transpose_bias)\n    x = _torch.softmax(x)\n    x = _torch.sigmoid(x)\n    return x\n\n# --- UNIVERSAL RUN (验证用，调 Model.forward) ---\n_model_cache = None\n_model_device = None\n\ndef run(x):\n    global _model_cache, _model_device\n    if _model_cache is None or _model_device != str(x.device):\n        _model_cache = Model(*get_init_inputs())\n        _model_cache.load_state_dict(_torch.load(_weights_path, map_location='cpu', weights_only=True))\n        _model_cache = _model_cache.to(x.device).eval()\n        _model_device = str(x.device)\n    return _model_cache(x)\n"
+}
