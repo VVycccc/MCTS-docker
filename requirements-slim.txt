@@ -1,0 +1,21 @@
+# DirecTune-MCTS 运行时依赖 — slim profile（默认 naive+MCTS 流水线）
+# 与 requirements.txt 的差异：去掉 AKG fallback 前端（langchain/langgraph/
+# transformers/tiktoken/networkx/tenacity/pydantic）与可选脚本依赖（scipy/
+# matplotlib）。generator.py 对 AKG 是惰性导入 + 优雅降级（_akg_imports_ok=False，
+# 打印 "AKG frontend not available"），naive seed + MCTS 搜索主路径零影响。
+#
+# 适用：gen_mode=naive（v6 默认）。需要 gen_mode=akg/v3 fallback 时用完整
+# requirements.txt 构建默认 profile。
+#
+# torch 由基础镜像预装（pytorch/pytorch:*）。
+triton>=3.7
+
+# LLM API clients（OpenAI 兼容端点：DeepSeek/GLM/autodl 桥接均覆盖）
+openai>=2.0
+aiohttp>=3.9
+httpx>=0.27
+requests>=2.31
+
+# config + numerics
+PyYAML>=6.0
+numpy>=1.26

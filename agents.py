@@ -22,6 +22,48 @@ from fix_code_gen import parse_modifications, DiffApplier, truncate_error_log
 # Module-level profiler cache (lazily created once per process)
 _profiler: HardwareProfiler | None = None
 
+# Module-level AsyncOpenAI client cache — one client per (url, api_key) per
+# process, so expansions reuse the HTTP connection pool instead of paying a
+# fresh TLS handshake on every unified_editor call.
+_client_cache: dict[tuple[str, str], AsyncOpenAI] = {}
+
+
+def _get_client(model_cfg: dict) -> AsyncOpenAI:
+    key = (model_cfg.get("url", ""), model_cfg.get("api_key", ""))
+    if key not in _client_cache:
+        _client_cache[key] = AsyncOpenAI(base_url=model_cfg["url"], api_key=model_cfg["api_key"])
+    return _client_cache[key]
+
+
+# 各调用阶段的推理（thinking）默认值。patch/classifier/rewrite 关推理：search/replace
+# JSON、方向判定、全量重写都不需要深推理——A/B（2026-08-27，work-log 同日二）实测关掉后
+# 单次调用快 5-10×、completion token 省约 5×，patch 失败率升高但由 _verify_code 关卡
+# 兜底 + MCTS 多试补偿，champion 不降反升。seed 保推理：关掉会读错题（normalized_shape
+# 错归约），从零生成的读题核对依赖推理链。均可经 config llm_thinking.<stage> 覆盖。
+_STAGE_THINKING_DEFAULTS = {"patch": False, "classifier": False, "rewrite": False, "seed": True}
+
+
+def _stage_thinking(config: dict | None, stage: str) -> bool:
+    """Per-stage reasoning toggle: config.llm_thinking.<stage> overrides the default."""
+    cfg = (config or {}).get("llm_thinking") or {}
+    if stage in cfg:
+        return bool(cfg[stage])
+    return _STAGE_THINKING_DEFAULTS.get(stage, True)
+
+
+# 端点/模型不接受 thinking 字段（代理后的模型不支持推理控制）时置 True，
+# 进程内后续调用不再携带该字段，避免每次都白撞一次 400。
+_thinking_off_unsupported = False
+
+
+def _is_unsupported_param_error(e: Exception) -> bool:
+    """400-class error thrown while a thinking override was sent — likely the field itself."""
+    status = getattr(e, "status_code", None)
+    if status is None:
+        response = getattr(e, "response", None)
+        status = getattr(response, "status_code", None)
+    return status == 400
+
 
 def _get_profiler(config: dict) -> HardwareProfiler:
     global _profiler
@@ -77,9 +119,23 @@ async def _chat(
     temperature: float = 0.7,
     max_tokens: int = 20000,
     timeout: float = 600,
+    config: dict | None = None,
+    stage: str = "default",
 ) -> str | None:
-    """Single async chat completion with retries."""
+    """Single async chat completion with retries.
+
+    ``stage`` (patch/rewrite/classifier/seed) resolves the per-stage thinking
+    toggle from ``config.llm_thinking`` — reasoning models burn most wall-clock
+    and completion tokens on invisible reasoning_content that this pipeline
+    never consumes, so low-stakes stages disable it by default.
+    """
+    global _thinking_off_unsupported
+    thinking = _stage_thinking(config, stage)
     for attempt in range(5):
+        extra = (
+            {"extra_body": {"thinking": {"type": "disabled"}}}
+            if not thinking and not _thinking_off_unsupported else None
+        )
         try:
             resp = await client.chat.completions.create(
                 model=model,
@@ -90,19 +146,28 @@ async def _chat(
                 temperature=temperature,
                 max_tokens=max_tokens,
                 timeout=timeout,
+                **(extra or {}),
             )
-            record_usage(resp)
+            record_usage(resp, stage=stage)
             return resp.choices[0].message.content
         except Exception as e:
+            # 端点拒绝 thinking 字段 → 丢弃该字段整进程降级，立即原样重试。
+            if extra and _is_unsupported_param_error(e):
+                _thinking_off_unsupported = True
+                continue
             if attempt == 4:
                 print(f"[LLM] Failed after 5 retries: {e}")
                 return None
             await asyncio.sleep(2 ** attempt)
 
 
-async def _gather_llm(client, model, system, user, n: int, temperature: float = 0.7) -> list[str]:
+async def _gather_llm(client, model, system, user, n: int, temperature: float = 0.7,
+                      config: dict | None = None, stage: str = "default",
+                      max_tokens: int = 20000, timeout: float = 600) -> list[str]:
     """Fire N parallel LLM calls, return non-None responses."""
-    tasks = [_chat(client, model, system, user, temperature) for _ in range(n)]
+    tasks = [_chat(client, model, system, user, temperature,
+                   max_tokens=max_tokens, timeout=timeout, config=config, stage=stage)
+             for _ in range(n)]
     results = await asyncio.gather(*tasks)
     return [r for r in results if r is not None]
 
@@ -412,19 +477,16 @@ def _build_unified_result(
     return entry
 
 
-async def _unified_edit_one(
+def _try_incremental(
     ci: int, ri: int, resp: str | None, baseline_code: str,
-    problem: Problem, config: dict, client: AsyncOpenAI, model: str,
-    baseline_latency_map: dict, problem_str: str, full_rewrite_system: str,
-    branch_id: str | None = None,
-) -> dict:
-    """Process one sampled patch: try incremental, fall back to full rewrite.
+    problem: Problem, config: dict,
+    baseline_latency_map: dict, branch_id: str | None = None,
+) -> tuple[dict | None, dict | None]:
+    """Parse + apply + verify one sampled incremental patch. No LLM, no fallback.
 
-    `resp` is the already-sampled incremental LLM response. `full_rewrite_system`
-    is the executor system prompt (with dynamic skill prepended) reused across
-    full-rewrite retries. `branch_id` carries the optimization-direction label
-    in direction-organized mode (e.g. ``dir_5_algo``); when None it falls back
-    to ``str(ci)`` (the legacy parent-index label).
+    Returns ``(result, None)`` on success, else ``(None, fail_ctx)`` where
+    fail_ctx carries everything the full-rewrite fallback needs (error, code,
+    change_desc, ids). GPU-bound; must run serially (CUDA not concurrency-safe).
     """
     plan_id = f"ue_{ci}_{ri}"
     bid = branch_id if branch_id is not None else str(ci)
@@ -433,13 +495,11 @@ async def _unified_edit_one(
     # only tag the log when it carries new info.
     tag = f" [{bid}]" if bid != str(ci) else ""
     timeout = config.get("timeout_seconds", 300)
-    max_full = config.get("unified_fail_threshold", 3)
     change_desc = ""
     match_levels: dict = {}
     last_error = ""
     last_code: str | None = None
 
-    # --- Phase 1: incremental search/replace patch ---
     mods, change_desc = _parse_unified_response(resp)
     if mods:
         diff = DiffApplier.apply_modifications(baseline_code, mods, raw_llm_output=resp or "")
@@ -453,7 +513,7 @@ async def _unified_edit_one(
                 return _build_unified_result(
                     baseline_code, plan_id, bid, new_code, pr, change_desc,
                     "incremental", match_levels, baseline_latency_map, config, problem,
-                )
+                ), None
             last_error = err or "verification failed"
         else:
             last_error = "patch apply failed: " + ("; ".join(diff.errors) if diff.errors else "no match")
@@ -462,42 +522,99 @@ async def _unified_edit_one(
     else:
         last_error = "LLM returned None"
 
-    # --- Phase 2: full-rewrite fallback (rule-based, no Conductor LLM) ---
-    for full in range(max_full):
+    return None, {
+        "ci": ci, "ri": ri, "plan_id": plan_id, "bid": bid, "tag": tag,
+        "baseline_code": baseline_code, "change_desc": change_desc,
+        "match_levels": match_levels, "last_error": last_error, "last_code": last_code,
+    }
+
+
+async def _rewrite_fallback(
+    fails: list[dict], problem: Problem, config: dict, client: AsyncOpenAI, model: str,
+    baseline_latency_map: dict, problem_str: str, full_rewrite_system: str,
+) -> list[dict]:
+    """Full-rewrite fallback for patches whose incremental attempt failed.
+
+    Round 1 fires all rewrite LLM calls in parallel (independent requests;
+    GPU verification happens after, serially). Rounds 2..unified_fail_threshold
+    (rare) retry serially with the fresh error fed back, matching the old
+    per-patch semantics. Previously every rewrite was a serial await inside
+    the per-patch loop — on GLM-5.2 (~100s/call) N failures cost N×100s.
+    """
+    max_full = config.get("unified_fail_threshold", 3)
+    timeout = config.get("timeout_seconds", 300)
+    results: list[dict] = []
+    if not fails or max_full < 1:
+        for f in fails:
+            print(f"  [unified] ue_{f['ci']}_{f['ri']}{f['tag']} ✗ failed: {f['last_error'][:120] if f['last_error'] else 'unknown'}")
+            results.append({
+                "baseline_code": f["baseline_code"], "plan_id": f["plan_id"], "branch_id": f["bid"],
+                "sample_id": "0",
+                "error": f"All {max_full} full-rewrite retries exhausted: {f['last_error']}",
+                "change_description": f["change_desc"], "edit_mode": "full_rewrite",
+                "match_levels": f["match_levels"],
+            })
+        return results
+
+    def _rewrite_user(f: dict) -> str:
         user = _build_executor_user(
-            problem_str, baseline_code,
-            change_desc or "Rewrite the kernel to fix the error and apply the intended optimization.",
+            problem_str, f["baseline_code"],
+            f["change_desc"] or "Rewrite the kernel to fix the error and apply the intended optimization.",
             config,
         )
-        if last_code is not None and last_error:
+        if f["last_code"] is not None and f["last_error"]:
             user += (
-                f"\n\n# 上次修改失败，请修正\n## 失败的代码\n```python\n{last_code[:3000]}\n```\n"
-                f"## 错误信息\n{truncate_error_log(last_error)}"
+                f"\n\n# 上次修改失败，请修正\n## 失败的代码\n```python\n{f['last_code'][:3000]}\n```\n"
+                f"## 错误信息\n{truncate_error_log(f['last_error'])}"
             )
-        resp2 = await _chat(client, model, full_rewrite_system, user, temperature=0.3)
-        if resp2 is None:
-            last_error = "LLM call failed (full rewrite)"
-            continue
-        new_code = _extract_code(resp2)
-        if new_code is None:
-            last_error = "No code block found in full-rewrite response"
-            continue
-        last_code = new_code
-        pr, err = _verify_code(new_code, problem, timeout, config=config)
-        if pr is not None:
-            print(f"  [unified] ue_{ci}_{ri}{tag} ✓ full_rewrite (after {full + 1} attempt(s))")
-            return _build_unified_result(
-                baseline_code, plan_id, bid, new_code, pr, change_desc,
-                "full_rewrite", {}, baseline_latency_map, config, problem,
-            )
-        last_error = err or "verification failed"
+        return user
 
-    print(f"  [unified] ue_{ci}_{ri}{tag} ✗ failed: {last_error[:120] if last_error else 'unknown'}")
-    return {
-        "baseline_code": baseline_code, "plan_id": plan_id, "branch_id": bid,
-        "sample_id": "0", "error": f"All {max_full} full-rewrite retries exhausted: {last_error}",
-        "change_description": change_desc, "edit_mode": "full_rewrite", "match_levels": match_levels,
-    }
+    print(f"  [unified] {len(fails)} patch(es) fell back to full-rewrite — "
+          f"firing {len(fails)} rewrite call(s) in parallel")
+    resps = await asyncio.gather(*[
+        _chat(client, model, full_rewrite_system, _rewrite_user(f),
+              temperature=0.3, config=config, stage="rewrite")
+        for f in fails
+    ])
+
+    for f, resp2 in zip(fails, resps):
+        ci, ri, tag = f["ci"], f["ri"], f["tag"]
+        attempt = 1
+        last_code = _extract_code(resp2) if resp2 else None
+        last_error = ("LLM call failed (full rewrite)" if resp2 is None
+                      else "No code block found in full-rewrite response" if last_code is None
+                      else "")
+        while True:
+            if last_code is not None:
+                pr, err = _verify_code(last_code, problem, timeout, config=config)
+                if pr is not None:
+                    print(f"  [unified] ue_{ci}_{ri}{tag} ✓ full_rewrite (after {attempt} attempt(s))")
+                    results.append(_build_unified_result(
+                        f["baseline_code"], f["plan_id"], f["bid"], last_code, pr,
+                        f["change_desc"], "full_rewrite", {}, baseline_latency_map, config, problem,
+                    ))
+                    break
+                last_error = err or "verification failed"
+            if attempt >= max_full:
+                print(f"  [unified] ue_{ci}_{ri}{tag} ✗ failed: {last_error[:120] if last_error else 'unknown'}")
+                results.append({
+                    "baseline_code": f["baseline_code"], "plan_id": f["plan_id"], "branch_id": f["bid"],
+                    "sample_id": "0",
+                    "error": f"All {max_full} full-rewrite retries exhausted: {last_error}",
+                    "change_description": f["change_desc"], "edit_mode": "full_rewrite",
+                    "match_levels": f["match_levels"],
+                })
+                break
+            # 串行补试（带最新错误反馈），与旧 per-patch 循环语义一致。
+            resp3 = await _chat(client, model, full_rewrite_system,
+                                _rewrite_user({**f, "last_code": last_code, "last_error": last_error}),
+                                temperature=0.3, config=config, stage="rewrite")
+            attempt += 1
+            last_code = _extract_code(resp3) if resp3 else None
+            last_error = ("LLM call failed (full rewrite)" if resp3 is None
+                          else "No code block found in full-rewrite response" if last_code is None
+                          else "")
+    return results
 
 
 # Default direction set (8 directions, v6). 优先级序 = 预期收益从高到低，作分类器失败兜底。
@@ -564,7 +681,7 @@ async def determine_applicable_directions(
     (8 directions) on LLM/parse failure.
     """
     model_cfg = config.get("model_backend", config["model"])
-    client = AsyncOpenAI(base_url=model_cfg["url"], api_key=model_cfg["api_key"])
+    client = _get_client(model_cfg)
 
     available = _get_available_directions(config)
     is_tle = config.get("triton_backend", "forge") == "forge_tle"
@@ -586,7 +703,8 @@ async def determine_applicable_directions(
 
     temp = config.get("direction_classifier_temp", 0.3)
     user = "请根据上述算子与 profile，判定适用的优化方向并按指定 JSON 格式输出。"
-    resp = await _chat(client, model_cfg["model"], system, user, temperature=temp)
+    resp = await _chat(client, model_cfg["model"], system, user, temperature=temp,
+                       max_tokens=4000, config=config, stage="classifier")
     if not resp:
         print(f"  [directions] classifier LLM call failed — using default {len(available)} directions")
         return [dict(d) for d in available]
@@ -647,7 +765,7 @@ async def unified_editor(
     patch per direction.
     """
     model_cfg = config.get("model_backend", config["model"])
-    client = AsyncOpenAI(base_url=model_cfg["url"], api_key=model_cfg["api_key"])
+    client = _get_client(model_cfg)
     system = _build_unified_system(config, problem)
 
     # Inject in-search experiences into system prompt
@@ -667,6 +785,11 @@ async def unified_editor(
     problem_str = _format_problem(problem)
     breadth = config.get("breadth", 4)
     temperature = config.get("unified_temperature", 0.7)
+    # patch 采样的输出预算/超时右移：search/replace JSON 实际 <2K tokens，
+    # 20000/600s 的全量重写预算只会放任跑飞 + 卡死时间预算（deadline 检查在
+    # patch 之间，单次调用不可中断）。
+    patch_max_tokens = config.get("patch_max_tokens", 8000)
+    patch_timeout = config.get("patch_timeout", 300)
     direction_mode = bool(config.get("direction_organized_frontier")) and bool(applicable_directions)
     free_explore = direction_mode and config.get("direction_free_explore", True)
 
@@ -707,7 +830,10 @@ async def unified_editor(
             print(f"  [unified] candidate {ci}: directional sampling {len(users)} patches "
                   f"({len(applicable_directions)} dirs, free_explore={'on' if free_explore else 'off'}) (temp={temperature})")
             raw = await asyncio.gather(*[
-                _chat(client, model_cfg["model"], system, u, temperature) for u in users
+                _chat(client, model_cfg["model"], system, u, temperature,
+                      max_tokens=patch_max_tokens, timeout=patch_timeout,
+                      config=config, stage="patch")
+                for u in users
             ])
             pairs: list[tuple] = [(r, lab) for r, lab in zip(raw, labels) if r is not None]
         else:
@@ -715,22 +841,34 @@ async def unified_editor(
             print(f"  [unified] candidate {ci}: sampling {breadth} incremental patches (temp={temperature})")
             responses = await _gather_llm(
                 client, model_cfg["model"], system, user, n=breadth, temperature=temperature,
+                config=config, stage="patch", max_tokens=patch_max_tokens, timeout=patch_timeout,
             )
             pairs = [(r, None) for r in responses]
 
-        # Phase 2: verify + fallback (sequential — GPU/CUDA ops are not concurrency-safe).
-        # branch_id=None (legacy) → _unified_edit_one falls back to str(ci).
+        # Phase 2a: incremental attempts (serial — GPU/CUDA ops are not concurrency-safe).
+        # branch_id=None (legacy) → _try_incremental falls back to str(ci).
+        fails: list[dict] = []
         for ri, (resp, label) in enumerate(pairs):
             # deadline 检查（patch 之间）：已采到的 patch 不再验证，提前返回。
             if deadline and time.time() > deadline:
                 print(f"  [unified] deadline reached at candidate {ci} patch {ri}, "
                       f"returning {len(results)} results so far")
                 break
-            result = await _unified_edit_one(
-                ci, ri, resp, baseline_code, problem, config, client, model_cfg["model"],
-                baseline_latency_map, problem_str, full_rewrite_system,
-                branch_id=label,
+            result, fail_ctx = _try_incremental(
+                ci, ri, resp, baseline_code, problem, config,
+                baseline_latency_map, branch_id=label,
             )
-            results.append(result)
+            if result is not None:
+                results.append(result)
+            else:
+                fails.append(fail_ctx)
+
+        # Phase 2b: full-rewrite fallback — rewrite LLM calls fire in parallel
+        # (pure HTTP), verification of their outputs stays serial.
+        if fails and not (deadline and time.time() > deadline):
+            results.extend(await _rewrite_fallback(
+                fails, problem, config, client, model_cfg["model"],
+                baseline_latency_map, problem_str, full_rewrite_system,
+            ))
 
     return results

@@ -168,30 +168,58 @@ main.py（统一入口，单路径；Fuser 已退役）
 
 **已知限制**（MVP）：mid-iteration 超时靠 `search_time_budget` 兜底；方向截断不轮转靠 free_explore 兜底。
 
-#### 增量编辑执行流程（`agents.py:854 unified_editor` → `:771 _unified_edit_one`）
+#### 增量编辑执行流程（`agents.py unified_editor` → `_try_incremental` + `_rewrite_fallback`）
 
-输入 `candidates` 均为已验证正确的 baseline 内核。准备两套 prompt：增量用 `system`（triton_api_ref + skill_context + 硬件指标解读，`_build_unified_system:682`），回退用 `full_rewrite_system`（skill + executor_system.txt，`:886`）。
+输入 `candidates` 均为已验证正确的 baseline 内核。准备两套 prompt：增量用 `system`（triton_api_ref + skill_context + 硬件指标解读，`_build_unified_system`），回退用 `full_rewrite_system`（skill + executor_system.txt）。
 
 ```
 for each candidate (baseline 内核):
-├─ 阶段1 并行采样: _gather_llm async.gather 发 breadth 个 LLM 调用 (temp=0.7)    :910
+├─ 阶段1 并行采样: async.gather 发各方向 patch LLM 调用 (temp=0.7, stage="patch")
 │              每个产 JSON {modifications:[{old_string,new_string,replace_all,anchor}]}
-└─ 阶段2 串行验证: _unified_edit_one (CUDA 不并发安全)                            :916
-     ├─ 解析 parse_modifications(resp)                                            :791
-     ├─ 应用 DiffApplier.apply_modifications (4级匹配→替换)                       :793
-     │    diff.success(applied_count>0)? ──否──→ 全量重写回退
-     ├─ 验证 _verify_code (anti_pytorch + compile + correctness + benchmark)    :798
-     │    compiled & correct? ──否──→ 全量重写回退
-     ├─ 通过 → 返回 edit_mode="incremental" (+NCU hw_metrics)                   :801
-     │
-     └─ 全量重写回退 (最多 unified_fail_threshold 次):                           :813
-          切 executor_system prompt (产完整代码, 非patch) + temp=0.3
-          user 拼入失败代码 + 错误 (truncate_error_log)
-          _verify_code 共享关卡 → 通过返回 edit_mode="full_rewrite"
-          全失败 → 返回 error (baseline 字节不动)
+├─ 阶段2a 串行增量尝试: _try_incremental（GPU 绑定，CUDA 不并发安全）
+│    ├─ 解析 parse_modifications(resp)
+│    ├─ 应用 DiffApplier.apply_modifications (4级匹配→替换)
+│    │    diff.success? ──否──→ 记入 fails（fail_ctx 携带 last_error/last_code）
+│    ├─ 验证 _verify_code (anti_pytorch + compile + correctness + benchmark)
+│    │    通过 → edit_mode="incremental" (+NCU hw_metrics)
+│    └─ 失败 → 记入 fails
+└─ 阶段2b 全量重写回退: _rewrite_fallback（LLM 绑定 → 并行）
+     第 1 轮: 所有 fails 的 rewrite 调用 async.gather 并行发起（互不依赖），
+              返回后逐个串行 _verify_code（GPU 仍串行）
+     第 2..unified_fail_threshold 轮（罕见）: 串行带新错误反馈重试（同旧语义）
+     切 executor_system prompt (产完整代码, 非patch) + temp=0.3
+     user 拼入失败代码 + 错误 (truncate_error_log)
+     _verify_code 共享关卡 → 通过返回 edit_mode="full_rewrite"
+     全失败 → 返回 error (baseline 字节不动)
 │
 select_candidates: 过滤 error/latency=None → 按(baseline,branch)分组选最快 → top-k   search.py:13
 ```
+
+#### LLM 调用效率（2026-08-27：thinking 分阶段开关 + rewrite 并行化）
+
+**问题定位**（trace10 实测）：GLM-5.2 / deepseek-v4-flash / kimi-k3 均为推理模型，`reasoning_content` 计入 completion_tokens 且占大头（单次调用 completion 5.6-8.8K tokens，可见输出仅 1-2K），但流水线从不消费推理内容 → 单次调用 80-125s（即 work-log"GLM-5.2 每次~107s"的构成），3600s 预算只够 ~4 次 expansion。
+
+**三项优化**（`agents.py`）：
+
+1. **thinking 按阶段开关**：`_chat()` 加 `stage` 参数（patch/classifier/rewrite/seed），经 `config.llm_thinking.<stage>` 控制，默认 patch/classifier **off**（search/replace JSON 与方向判定不需要深推理；实测 autodl 端点 thinking off：GLM-5.2 4.7s→2.6s、ds4flash 4.4s→1.7s，completion token 省 ~70%）、rewrite/seed on（质量依赖）。实现走 `extra_body={"thinking":{"type":"disabled"}}`；端点返回 400 时自动整进程降级（`_thinking_off_unsupported`），不影响正确性。
+2. **rewrite 并行化**：见上阶段 2b——旧版每个失败 patch 的 full-rewrite 是 patch 循环内串行 await（N 个失败 × ~100s），现在第 1 轮全并行，验证仍串行（`_verify_code` 用 signal.alarm 必须主线程串行的约束不变）。
+3. **patch 输出预算右移**：`patch_max_tokens=8000`（原 20000 全量重写预算）、`patch_timeout=300`（原 600s 会放任单次调用卡死吃掉时间预算——deadline 检查只在 patch 之间生效）。
+
+**配套**：`AsyncOpenAI` client 按 (url,api_key) 进程内缓存（`_get_client`，免每次 expansion 重建 TLS 连接）；`TOKEN_USAGE` 按阶段拆分记账（`record_usage(resp, stage=)`），run 末打印各阶段 prompt/completion/calls，用于 A/B 验证节省量。**注意 autodl 端点无前缀缓存**（同 prompt 两次调用 `cached_tokens=0`），prompt 侧没有免费复利，token 节省主要来自 thinking off。
+
+**A/B 判决（2026-08-27，3 题 × 3 臂，`output/ab_thinking/`，`run_ab_thinking.sh` + `summarize_ab_thinking.py`）**：
+
+| 臂 | 01 matmul | 40 layernorm | 30 L2 融合 | 通过率 | completion |
+|---|---|---|---|---|---|
+| on（全推理） | 2.35× | 30.55× | seed 三连挂* | 12/12 | 268K |
+| patch/classifier 关 | 2.75× | 55.35× | 3.88×† | 43/55 | 341K |
+| + rewrite 关（现行默认） | **5.16×** | 34.25×† | **13.27×**‡ | 72/112 | **71K** |
+
+*GLM-5.2 在 30 题 seed 是抽卡（开推理也挂）；†35min 撞 shell timeout 截断；‡跑 10min 被停。
+
+- **rewrite 关推理判可通过**：失败率 22%→36%（细节幻觉，如路径写成 `wangchenyi`），但单次调用快 5-10×，MCTS 靠多试补偿——champion 不降反升（01: 5.16× vs 2.75×；30: 13× vs 3.9×），token 341K→71K。错误 patch 由 `_verify_code` 关卡兜底，失败只浪费一次便宜调用。已落 `config.yaml` 默认。
+- **seed 保推理不可砍**：关推理 3/3 把 `normalized_shape=(64,256,256)` 错归约成最后一维 256（教科书 LayerNorm 模板套题，l2_rel≈0.076 数值错）；开推理样本在推理链里做了读题核对。kernel body 都写得对，挂的全是"归约多宽"这类读题语义判断——正是推理链兜底的环节。
+- alloff 高失败率的补偿机制依赖"失败便宜 + 验证关卡"，若未来切到**按 token 计费敏感**或**验证很贵**的场景需重评。
 
 #### CodeMatcher 4 级匹配（`fix_code_gen.py:67`）
 

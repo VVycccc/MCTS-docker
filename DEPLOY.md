@@ -1,11 +1,47 @@
 # MCTS-docker 部署指南
 
-三种部署方式按场景选一种：**A** 目标机有外网（最简单）；**B** 离线内网机（用导出的镜像包）；**C** 不用 Docker。
+三种部署方式按场景选一种：**A** 目标机有外网（最简单）；**B** 离线内网机（用导出的镜像包）；**C** 不用 Docker。**D** 为 2026-08-27 新增的瘦身传输方案（JumpServer 多硬件测试用，镜像从 14.5GB 减到 ~5.5GB、压缩传输 ~2GB）。
 
 前置要求（所有方式通用）：
 
 - Linux + **NVIDIA 驱动 >= 525**（`nvidia-smi` 右上角显示 CUDA Version >= 12.6）
 - LLM API：任一 OpenAI 兼容端点（DeepSeek / GLM / GPT 等）的 url + model + api_key
+
+---
+
+## 方式 D：瘦身镜像 + 小体积传输（JumpServer / 多硬件部署，2026-08-27）
+
+### 为什么原来 14.5GB
+
+`pytorch:2.6.0-cuda12.6-cudnn9-devel` 基础镜像里 **CUDA toolkit 占 4.9GB + nsight 占 1.2GB，流水线完全用不到**——Triton 编译走 wheel 自带的 ptxas，NCU 默认是 `hw_profiler.backend: noop`。真正需要的只有 `/opt/conda`（torch/triton/依赖，6.4GB）+ 源码（46MB）。
+
+### 瘦身三件套
+
+| 工具 | 作用 |
+|------|------|
+| `build-local-slim.sh` | 从本地已有完整镜像多阶段抽取：239MB cuda-base + 剥完 AKG 栈的 /opt/conda + /app → `directune-mcts:slim`（~5.5GB）。**零网络依赖**（本机 Docker Hub 拉不动大层也能做） |
+| `Dockerfile` 的 `ARG BASE` | 基础镜像可参数化，默认已改为 `runtime` 变体（能直连拉取的机器上 `./build.sh` 直接出 ~5GB 镜像） |
+| `requirements-slim.txt` | 去掉 AKG fallback 栈（langchain/transformers 等 ~1.2GB），naive+MCTS 主路径零影响（generator 对 AKG 是惰性导入+优雅降级） |
+
+`STRIP=0 ./build-local-slim.sh` 保留 AKG 栈（需要 `gen_mode: akg` fallback 对照时用，~6.7GB）。
+
+### 传输（`deploy-transfer.sh`，按目标机网络条件选）
+
+```bash
+./deploy-transfer.sh stream user@target   # ① ssh 直连：docker save|zstd|ssh docker load，无中间文件
+./deploy-transfer.sh file                 # ② JumpServer 网页上传：zstd-19 压缩 + 1GB 分卷
+./deploy-transfer.sh src user@target      # ③ 只传源码 ~20MB，目标机拉 runtime 基础镜像重建
+```
+
+- **①stream**（~2GB 流量）：目标机能从开发机 ssh 反向到达时最快，一条管道完成。
+- **②file**：分卷大小 `CHUNK=1G` 可调（JumpServer 网页上传单文件常限 2-4GB）。目标机恢复：`cat directune-mcts.tar.zstd.* | zstd -d | docker load`。
+- **③src**（传输最小）：目标机能连 Docker 镜像源（daocloud/1ms 等前缀）时，只传 20MB 源码上下文，基础镜像在目标机侧拉取。**优先试这条**，失败再回退 ②。
+
+### 多硬件注意事项
+
+- **驱动**：宿主机驱动 >= 525 即可（CUDA 12.6 runtime 向下兼容驱动）。镜像内无 toolkit，不存在本地 nvcc 版本匹配问题。
+- **NCU**：slim 镜像无 nsight-compute。要采硬件指标时：目标机宿主机装 `nsight-compute` 后用 `hw_profiler.ncu_python` 指向宿主机 Python；或 `STRIP=0` + devel 基础镜像。
+- **L2 权重**（24GB）：永远不进镜像，按「跑 L2 题」节挂载。
 
 ---
 

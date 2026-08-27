@@ -16,12 +16,20 @@
 # upgrades triton to 3.7 — the pipeline only needs triton >= 3 and an
 # OpenAI-compatible API endpoint. If registry access allows, prefer
 # pytorch/pytorch:2.12.0-cuda13.0-cudnn9-runtime for exact version parity.
+#
+# BASE 默认 runtime（无 CUDA toolkit，约 4GB）：Triton 编译走 wheel 自带的
+# ptxas，流水线不需要系统 nvcc/nsight。NCU profiling 需要额外装
+# nsight-compute（见 DEPLOY.md）。devel 基础镜像（含 toolkit，约 13GB）仅在
+# 需要镜像内 NCU 或 CUDA C++ 编译时使用：
+#   BASE=pytorch/pytorch:2.6.0-cuda12.6-cudnn9-devel ./build.sh
 
-FROM pytorch/pytorch:2.6.0-cuda12.6-cudnn9-devel
+ARG BASE=pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime
+FROM ${BASE}
 
 # tini: proper signal handling so `docker stop` interrupts long searches cleanly
+# gcc/libc6-dev: Triton compiles its CudaUtils C shim at first kernel launch
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        tini rsync ca-certificates \
+        tini rsync ca-certificates gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

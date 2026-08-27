@@ -535,6 +535,8 @@ async def main():
 
     print(f"\n=== Token usage ===")
     print(f"  prompt={TOKEN_USAGE['prompt']} completion={TOKEN_USAGE['completion']} total={TOKEN_USAGE['prompt']+TOKEN_USAGE['completion']} calls={TOKEN_USAGE['calls']}")
+    for stage, s in sorted(TOKEN_USAGE.get("stages", {}).items()):
+        print(f"    [{stage:10s}] prompt={s['prompt']} completion={s['completion']} calls={s['calls']}")
     print(f"\n=== Done ===")
     print(f"Results saved to {final_path}")
     for c in candidates:

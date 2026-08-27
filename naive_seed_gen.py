@@ -21,11 +21,10 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 PROJECT = str(Path(__file__).resolve().parent)
 sys.path.insert(0, PROJECT)
 
-from openai import AsyncOpenAI
 import torch
 from triton_backend import (
     Problem, load_problem, profile as triton_profile,
-    anti_pytorch_check, adaptive_rel_tol, record_usage,
+    anti_pytorch_check, adaptive_rel_tol,
 )
 
 # 验证题集：覆盖 GLM 能力圈内 + 盲区边缘，用 dir_probe problems（含 op_type）
@@ -114,21 +113,12 @@ def _write_debug_json(dbg: Path | None, name: str, data: dict) -> None:
         print(f"  [naive-debug] failed to write {name}: {e}")
 
 
-async def gen_one(client, model, system, user, temp=0.7) -> str | None:
-    for attempt in range(3):
-        try:
-            resp = await client.chat.completions.create(
-                model=model, messages=[{"role": "system", "content": system},
-                                       {"role": "user", "content": user}],
-                temperature=temp, max_tokens=20000, timeout=600,
-            )
-            record_usage(resp)
-            return resp.choices[0].message.content
-        except Exception as e:
-            if attempt == 2:
-                print(f"  [LLM] failed: {e}")
-                return None
-            await asyncio.sleep(2 ** attempt)
+async def gen_one(client, model, system, user, temp=0.7, config: dict | None = None) -> str | None:
+    """Single seed-generation call. Delegates to agents._chat so the per-stage
+    thinking toggle (seed 默认保推理) and stage token accounting apply uniformly."""
+    from agents import _chat
+    return await _chat(client, model, system, user, temperature=temp,
+                       config=config, stage="seed")
 
 
 async def gen_seed(problem: Problem, op_type: str, config: dict, max_retries=2) -> dict:
@@ -146,7 +136,8 @@ async def gen_seed(problem: Problem, op_type: str, config: dict, max_retries=2) 
     user = _render(user_tpl, kernel_code=problem.reference, op_type=op_type)
 
     model_cfg = config.get("model_frontend", config["model"])
-    client = AsyncOpenAI(base_url=model_cfg["url"], api_key=model_cfg["api_key"])
+    from agents import _get_client
+    client = _get_client(model_cfg)
 
     rel_tol = adaptive_rel_tol(problem)
     dbg = _debug_dir(config)
@@ -161,7 +152,7 @@ async def gen_seed(problem: Problem, op_type: str, config: dict, max_retries=2) 
     for rnd in range(max_retries + 1):
         _write_debug_text(dbg, f"attempt_{rnd}_user_prompt.txt", user)
         resp = await gen_one(client, model_cfg["model"], system, user,
-                             temp=0.7 if rnd == 0 else 0.3)
+                             temp=0.7 if rnd == 0 else 0.3, config=config)
         if resp is None:
             last_err = "llm request failed"
             _write_debug_text(dbg, f"attempt_{rnd}_error.txt", last_err)

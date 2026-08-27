@@ -29,6 +29,8 @@ build/
 # Docker build staging & exports
 .build/
 *.tar.gz
+*.tar.zstd*
+directune-mcts.tar*
 
 # misc local logs
 *.log

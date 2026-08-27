@@ -144,17 +144,25 @@ def adaptive_rel_tol(problem: "Problem") -> float:
     return 1e-2 if max_dim > 100_000 else 1e-3
 
 
-# 全局 token 用量累积（验证 skill 瘦身等优化的实际 token 节省）
-TOKEN_USAGE = {"prompt": 0, "completion": 0, "calls": 0}
+# 全局 token 用量累积（验证 skill 瘦身等优化的实际 token 节省）。
+# stages 按调用阶段（patch/rewrite/classifier/seed）拆分，run 末打印——
+# 用于量化 thinking-off 等优化在各阶段的实际 token 节省。
+TOKEN_USAGE = {"prompt": 0, "completion": 0, "calls": 0, "stages": {}}
 
 
-def record_usage(resp) -> None:
-    """Accumulate LLM token usage from a completion response."""
+def record_usage(resp, stage: str = "default") -> None:
+    """Accumulate LLM token usage from a completion response (per-stage optional)."""
     u = getattr(resp, "usage", None)
     if u:
-        TOKEN_USAGE["prompt"] += getattr(u, "prompt_tokens", 0) or 0
-        TOKEN_USAGE["completion"] += getattr(u, "completion_tokens", 0) or 0
+        p = getattr(u, "prompt_tokens", 0) or 0
+        c = getattr(u, "completion_tokens", 0) or 0
+        TOKEN_USAGE["prompt"] += p
+        TOKEN_USAGE["completion"] += c
         TOKEN_USAGE["calls"] += 1
+        s = TOKEN_USAGE["stages"].setdefault(stage, {"prompt": 0, "completion": 0, "calls": 0})
+        s["prompt"] += p
+        s["completion"] += c
+        s["calls"] += 1
 
 
 @dataclass

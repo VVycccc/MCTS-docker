@@ -6,13 +6,23 @@
 # self-contained build context in .build/ first.
 #
 # Usage:
-#   ./build.sh                     # image tag: directune-mcts:latest
+#   ./build.sh                     # image tag: directune-mcts:latest, 完整依赖（含 AKG fallback）
 #   ./build.sh mytag               # image tag: directune-mcts:mytag
+#   PROFILE=slim ./build.sh        # slim 依赖（无 langchain/transformers 栈，仅 naive+MCTS 主路径）
+#   BASE=pytorch/pytorch:2.6.0-cuda12.6-cudnn9-devel ./build.sh   # 显式换基础镜像
 #   UID=1000 GID=1000 ./build.sh   # match host user for bind-mounted output/
 set -euo pipefail
 cd "$(dirname "$0")"
 
 TAG="${1:-latest}"
+PROFILE="${PROFILE:-full}"   # full | slim
+BASE="${BASE:-pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime}"
+
+case "$PROFILE" in
+  full) REQ="requirements.txt" ;;
+  slim) REQ="requirements-slim.txt" ;;
+  *) echo "ERROR: PROFILE must be full|slim (got: $PROFILE)" >&2; exit 1 ;;
+esac
 AKG_REAL="$(readlink -f akg_frontend)"
 if [ ! -d "$AKG_REAL/akg_agents" ]; then
     echo "ERROR: akg_frontend symlink broken: $AKG_REAL" >&2
