@@ -43,6 +43,16 @@
 - **NCU**：slim 镜像无 nsight-compute。要采硬件指标时：目标机宿主机装 `nsight-compute` 后用 `hw_profiler.ncu_python` 指向宿主机 Python；或 `STRIP=0` + devel 基础镜像。
 - **L2 权重**（24GB）：永远不进镜像，按「跑 L2 题」节挂载。
 
+### 内置 champion 导出（/app/champions，2026-09-04 起随镜像发布）
+
+镜像内烘焙了历史所有 run 的 champion 内核：`/app/champions/<run>__<problem>.py` + `_manifest.{json,csv}`（165 个，2026-09-04 快照，含论文案例 `l2_9_trace_20260828__9_Matmul_Subtract_Multiply_ReLU.py` = champion n30 @1.21ms）。放在独立路径而非 `/app/output/champions_export`，是为了不被 `-v $PWD/output:/app/output` 挂载遮蔽。本机重生成/增量更新：
+
+```bash
+python3 scripts/export_champions.py --dry-run   # 预览新增
+python3 scripts/export_champions.py             # 写入 output/champions_export/（已导出文件不重写）
+./build.sh                                      # 重新打镜像
+```
+
 ---
 
 ## 方式 A：目标机能上网（从 GitHub 直接部署）

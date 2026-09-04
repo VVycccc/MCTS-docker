@@ -60,6 +60,24 @@ API 配置在 `config.yaml` 里，当前使用 DS4Pro (`api.deepseek.com/v1`, mo
 
 错误分类：`compile_error` | `validation_error` | `llm_error` | `pipeline_error` | `oom_error`
 
+### 4. MCTS 带标签节点记录（2026-08-27 新增，默认必须）
+
+输出文件：`output/{exp_name}/{problem_name}/mcts_tree.json`，每 rollout 刷新（崩溃安全），由 `mcts.serialize_tree()` 生成。背景：checkpoint 原本只存 summary（total_nodes/best_latency_ms），无法回答「冠军路径经过哪些方向、是否穿过被贪心丢弃的回归节点」——论文 intro 的机制论断和 feedback-loop 反事实重放都需要这份数据。
+
+- **nodes**（BFS 全集，含完整 code）：方向标签 `direction`/`branch_id`/`edit_mode`、拓扑 `node_id`/`parent_id`/`depth`、预算序 `order_index`（创建序 = validated-kernel 消耗序）、性能 `latency_ms`/`reward_vs_seed`/**`vs_parent_x`**（<1 即「贪心 accept-only 会切断的回归边」）、P/N/W/Q 搜索统计、终态原因
+- **champion_path**：root→champion 的 (direction, latency, vs_parent_x) 链，冠军收益逐步归因到方向
+- **expansion_events**：每次 expansion 的 sampled/validated/failures 明细（LLM 调用口径，树里只有成功者）
+- **budget_counters**：checkpoints/expansions/validated_nodes
+
+配套：`checkpoint_iterN.json` 的 `tree` 块加 `champion_node_id`/`champion_path`；`final_results.json` 顶层嵌 `mcts_tree`。离线分析零 GPU：
+
+```bash
+# 反事实重放 + 冠军归因链 + 贪心切断边定位
+python scripts/replay_greedy_from_tree.py output/full_mcts/<problem>
+```
+
+重放语义注意：贪心循环的 prompt 只含 current-best ⇒ 被拒节点的后代根本不会被生成。所以祖先感知重放（按 order_index 流、parent 不在接受集则跳过）才是忠实模拟，纯延迟过滤会高估贪心。mock 测试：`scripts/test_mcts_tree_records.py`（forge env 运行，不占 GPU）。
+
 ### 实现方式
 
 在 `main.py` 和 `agents.py` 的关键节点插入 `_save_trace()` 调用，统一写入上述结构。实验启动时通过 `config.yaml` 中的 `exp_name` 字段指定实验名称。
@@ -254,9 +272,9 @@ LLM 凭记忆写的 old_string 常与 baseline 有空白/缩进差异，4 级 fa
 - 缩小改动表面积 = 降低弱模型改坏对的代码的概率（治 v4 "全量重写改坏原本对的代码"）
 - 局限：保证"不比 baseline 差"，不保证"一定改进"；old_string 4 级匹配全失败 → 回退全量重写
 
-## 打包部署（2026-08-19）
+## 打包部署（2026-08-19，2026-09-04 加 champion 导出）
 
-详见 `DEPLOY.md`。要点：`./build.sh` 构建 `directune-mcts:latest` Docker 镜像（自动解引用 `akg_frontend`/`problems` 两个指向老 DirecTune 的 symlink 成自包含上下文）；镜像不含任何 API key。配套可移植化改动：`triton_backend.load_problem()` 会把 reference 里写死的 `_weights_path` 重写为按 problem JSON 所在目录解析（L2 JSON 原含 `/home/wangyichen/...` 绝对路径，迁移即失效）；`hardware_profiler` NCU 解释器默认 `sys.executable`（`DT_NCU_PYTHON` / config 可覆盖）；散落脚本（bench_inductor/naive_seed_*/plot_* 等）的绝对路径全部改为相对或环境变量（`DT_DIR_PROBE` / `KB_L1` / `KB_L2`）。
+详见 `DEPLOY.md`。要点：`./build.sh` 构建 `directune-mcts:latest` Docker 镜像（自动解引用 `akg_frontend`/`problems` 两个指向老 DirecTune 的 symlink 成自包含上下文）；镜像不含任何 API key。**2026-09-04 起**镜像内置历史 champion 导出：`scripts/export_champions.py` 扫全部 run 的 `final_candidates[0].code`（三种布局：run 根 / mcts 子目录 / 嵌套 ablation+tryN）生成 `output/champions_export/<run>__<problem>.py` + `_manifest.{json,csv}`（已导出文件永不重写，只增量补），build.sh 把它拷进 staging、Dockerfile 烘焙到 **`/app/champions/`**（独立路径，防 `-v output:/app/output` 挂载遮蔽）。配套可移植化改动：`triton_backend.load_problem()` 会把 reference 里写死的 `_weights_path` 重写为按 problem JSON 所在目录解析（L2 JSON 原含 `/home/wangyichen/...` 绝对路径，迁移即失效）；`hardware_profiler` NCU 解释器默认 `sys.executable`（`DT_NCU_PYTHON` / config 可覆盖）；散落脚本（bench_inductor/naive_seed_*/plot_* 等）的绝对路径全部改为相对或环境变量（`DT_DIR_PROBE` / `KB_L1` / `KB_L2`）。
 
 ## 模块职责
 
@@ -345,6 +363,12 @@ Conductor → Coder / FixCodeGen / END
 - asyncio Lock 串行化 CUDA 操作（`generator.py:_gpu_lock`）
 - 每轮/每次 correctness check 后 `torch.cuda.empty_cache()`
 - gen_workers > 1 在大张量问题上可能 OOM
+
+### CUDA 上下文中毒防护（2026-08-27）
+一个候选 kernel 的非法访存会**永久毒化主进程 CUDA context**——之后所有验证连带报同一错误且不可恢复，剩余预算静默作废（历史 6/252 run 中招、零恢复；treelog try1 整场报废实例）。防护：`config["isolated_verify"]=true` 时 `agents._verify_code` 走 `triton_backend.profile_isolated()`（run_isolated_validation 加 reps/warmup 参数扩展出的子进程全链验证），坏 kernel 只死子进程。
+- **代价**：每候选 +2~3s 子进程 import；latency 与进程内路径偏差 <3%（scripts/test_isolated_verify.py 三断言：等价性/抗毒性/开销）
+- **注意**：子进程崩溃类错误前缀为 `[isolated-crash]`（区分不了语法错与 device abort，stderr 关键字粗分 [compile]）；main.py 的 seed/baseline profiling 仍走进程内 `triton_profile`（seed 生成期中毒概率低、有 sys.exit 兜底），如需全覆盖再迁
+- 批量实验建议在 config 里开 true
 
 ## KernelBench 数据集
 

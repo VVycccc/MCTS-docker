@@ -46,6 +46,11 @@ COPY . .
 # config.yaml (with real API keys) never enters the image.
 COPY config.example.yaml config.yaml
 
+# Champions of past runs (scripts/export_champions.py regenerates them).
+# Baked at /app/champions — a separate path from /app/output so that the
+# documented `-v $PWD/output:/app/output` runtime mount cannot shadow them.
+COPY output/champions_export /app/champions/
+
 # Write results as this uid/gid (matches host user to avoid root-owned output/)
 ARG UID=1000
 ARG GID=1000

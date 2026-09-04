@@ -47,11 +47,18 @@ rsync -a --copy-links --exclude output --exclude .git --exclude __pycache__ \
 
 # 2) dereference akg_frontend into the staged context
 cp -r "$AKG_REAL" "$STAGE/akg_frontend"
+
+# 2b) ship the champion export (excluded from the rsync above together with
+# the rest of output/; regenerate anytime via scripts/export_champions.py)
+if [ -d output/champions_export ]; then
+    mkdir -p "$STAGE/output"
+    cp -r output/champions_export "$STAGE/output/"
+fi
 find "$STAGE" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
 
 # 3) restore the example config (it is the in-image default config.yaml)
 cp config.example.yaml "$STAGE/config.example.yaml"
 
-docker build -f Dockerfile -t "directune-mcts:$TAG" "$STAGE"
+docker build --build-arg BASE="$BASE" -f Dockerfile -t "directune-mcts:$TAG" "$STAGE"
 
 echo "Built directune-mcts:$TAG (staged context left in .build/ — delete at will)"

@@ -6,8 +6,10 @@ config_*.yaml
 .env.*
 .akg/settings.json
 
-# experiment outputs (huge, machine-specific)
-output/
+# experiment outputs (huge, machine-specific) — but the champion export
+# of past runs IS shipped in the image (see Dockerfile /app/champions)
+output/*
+!output/champions_export
 experiments/
 figures/
 docs/
