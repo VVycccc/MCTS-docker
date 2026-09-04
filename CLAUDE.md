@@ -272,6 +272,15 @@ LLM 凭记忆写的 old_string 常与 baseline 有空白/缩进差异，4 级 fa
 - 缩小改动表面积 = 降低弱模型改坏对的代码的概率（治 v4 "全量重写改坏原本对的代码"）
 - 局限：保证"不比 baseline 差"，不保证"一定改进"；old_string 4 级匹配全失败 → 回退全量重写
 
+## 等资源对照试验（MCTS vs AKG，2026-09-05 设计并验证）
+
+老 DirecTune 退役后的新对照：**DirecTune-MCTS（naive seed+树搜索，端到端）vs AKG（上游 master clone `/home/wangyichen/akg`，coder_only_workflow 端到端生成）**。资源对齐方案 A（best-of-N 等资源包）：同一题先跑 MCTS 臂，把其实际消耗（`final_results.json.resource_usage`：llm_calls/total_tokens）回填为 AKG 臂预算；AKG 独立重复生成至预算耗尽取 harness 最优。三轴 = LLM 调用数 + tokens 总量 + wall 兜底；上报延迟只认统一 harness（`profile_isolated`，MCTS 臂 champion 亦有 isolated 复测 `champion_latency_isolated`）。
+
+- 组件：`scripts/run_akg_arm.py`（驱动 `akg/akg_agents/python` 的 LangGraphTask coder_only_workflow + ModelNew→run shim + `LLMClient._update_token_stats` 记账 hook；--single 子进程迭代 + 驱动循环）、`scripts/run_ab_vs_akg.py`（runner：merge config.yaml底座→shared→arm，断点续跑）、`scripts/summarize_ab_vs_akg.py`（配对表+geomean+资源审计）、`config_ab_shared.yaml`/`config_ab_mcts.yaml`/`config_ab_greedy.yaml`（gitignore 排除）、`problems/ab_list_15.txt`（15 题清单）
+- 跑法：`python scripts/run_ab_vs_akg.py --problems problems/ab_list_15.txt --repeats 1`；汇总 `python scripts/summarize_ab_vs_akg.py --out output/ab_vs_akg`
+- smoke 已验证（l2_9：MCTS 1.155ms/6.02× vs AKG best-of-2 4.114ms/1.70×，统一口径）；AKG 单次生成消耗 ~1 call/16K tokens/2.5min，best-of-N 会自动扩到与 MCTS 等资源
+- 注意：`main.py` 现把 `resource_usage` 写进 final_results（此前只在 stdout）；config_ab_* 含 API key（gitignore 已排除）
+
 ## 打包部署（2026-08-19，2026-09-04 加 champion 导出）
 
 详见 `DEPLOY.md`。要点：`./build.sh` 构建 `directune-mcts:latest` Docker 镜像（自动解引用 `akg_frontend`/`problems` 两个指向老 DirecTune 的 symlink 成自包含上下文）；镜像不含任何 API key。**2026-09-04 起**镜像内置历史 champion 导出：`scripts/export_champions.py` 扫全部 run 的 `final_candidates[0].code`（三种布局：run 根 / mcts 子目录 / 嵌套 ablation+tryN）生成 `output/champions_export/<run>__<problem>.py` + `_manifest.{json,csv}`（已导出文件永不重写，只增量补），build.sh 把它拷进 staging、Dockerfile 烘焙到 **`/app/champions/`**（独立路径，防 `-v output:/app/output` 挂载遮蔽）。配套可移植化改动：`triton_backend.load_problem()` 会把 reference 里写死的 `_weights_path` 重写为按 problem JSON 所在目录解析（L2 JSON 原含 `/home/wangyichen/...` 绝对路径，迁移即失效）；`hardware_profiler` NCU 解释器默认 `sys.executable`（`DT_NCU_PYTHON` / config 可覆盖）；散落脚本（bench_inductor/naive_seed_*/plot_* 等）的绝对路径全部改为相对或环境变量（`DT_DIR_PROBE` / `KB_L1` / `KB_L2`）。

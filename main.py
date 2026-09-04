@@ -30,7 +30,7 @@ try:
 except AttributeError:
     pass  # 非 TextIOWrapper（如重定向到非 tty）时 no-op
 
-from triton_backend import Problem, ProfileResult, _normalize_shape, profile as triton_profile, load_problem, adaptive_rel_tol, TOKEN_USAGE
+from triton_backend import Problem, ProfileResult, _normalize_shape, profile as triton_profile, load_problem, adaptive_rel_tol, TOKEN_USAGE, profile_isolated
 from search import select_candidates, select_candidates_by_direction, update_experiences
 from agents import unified_editor, determine_applicable_directions, _derive_op_type, _get_profiler
 from direction_store import load_stats, record_iteration, merge_run, save_stats, get_op_stats, format_op_stats
@@ -507,6 +507,18 @@ async def main():
     speedup_vs_seed = (seed_latency / champion_latency
                        if seed_latency and champion_latency else None)
 
+    # 统一 harness 复测 champion（profile_isolated，与 AKG 臂同口径），
+    # 对照试验汇总优先用该值；搜索管线内部计时保留在 champion_latency_ms。
+    champion_latency_isolated = None
+    try:
+        pr_iso = profile_isolated(champion.get("code", ""), problem,
+                                  timeout_seconds=config.get("timeout_seconds", 300),
+                                  rel_tol=adaptive_rel_tol(problem), config=config)
+        if pr_iso.compiled and pr_iso.correct and pr_iso.latency_ms:
+            champion_latency_isolated = pr_iso.latency_ms
+    except Exception as e:
+        print(f"[isolated re-measure] failed: {e}")
+
     # Final output keeps the candidate/tree payload and also stores the three
     # independently measured latencies needed for attribution.
     final_path = Path(config["output_dir"]) / "final_results.json"
@@ -515,6 +527,7 @@ async def main():
         "baseline_latency_ms": baseline_latency,
         "seed_latency_ms": seed_latency,
         "champion_latency_ms": champion_latency,
+        "champion_latency_isolated": champion_latency_isolated,
         "speedup_vs_pytorch": speedup_vs_pytorch,
         "speedup_vs_seed": speedup_vs_seed,
         "strict_triton": "@triton.jit" in champion.get("code", ""),
@@ -523,6 +536,16 @@ async def main():
         # MCTS 带标签节点记录（方向标签/父链/预算序/champion_path，schema 见 mcts.serialize_tree）；
         # unified 模式无树，缺省为空 dict。详细版同时在 output_dir/mcts_tree.json。
         "mcts_tree": (episode_result or {}).get("mcts_tree", {}),
+        # 资源消耗持久化（对照试验按此回填另一臂的预算；此前只打印在 stdout）
+        "resource_usage": {
+            "llm_calls": TOKEN_USAGE.get("calls", 0),
+            "prompt_tokens": TOKEN_USAGE.get("prompt", 0),
+            "completion_tokens": TOKEN_USAGE.get("completion", 0),
+            "total_tokens": TOKEN_USAGE.get("prompt", 0) + TOKEN_USAGE.get("completion", 0),
+            "validated_nodes": ((episode_result or {}).get("mcts_tree", {})
+                                .get("budget_counters", {}).get("validated_nodes")),
+            "stages": TOKEN_USAGE.get("stages", {}),
+        },
         "final_candidates": [
             {
                 "code": c.get("code", ""),
