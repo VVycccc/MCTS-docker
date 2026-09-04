@@ -1,4 +1,5 @@
-output/
+output/*
+!output/champions_export
 __pycache__/
 *.pyc
 # KernelBench weights: L2/L3 .pt are huge (24GB) — excluded; L1 .pt (38MB) ships with repo
