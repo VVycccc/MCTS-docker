@@ -180,6 +180,10 @@ def main():
                 if not ru:
                     print("  [mcts] 无 resource_usage，akg 臂退化为自然收敛（不设 cap）")
             if "akg" in arms:
+                if ru is None:   # --arms akg 单独跑时，读已恢复的 mcts 臂产物
+                    mf = Path(args.out) / "mcts" / tag / "final_results.json"
+                    if mf.exists():
+                        ru = json.loads(mf.read_text()).get("resource_usage") or {}
                 budget = {"calls": int(ru.get("llm_calls") or 0),
                           "tokens": int(ru.get("total_tokens") or 0)}
                 if not budget["calls"] and not budget["tokens"]:
