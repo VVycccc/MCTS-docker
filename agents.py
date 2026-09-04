@@ -15,7 +15,7 @@ from pathlib import Path
 
 from openai import AsyncOpenAI
 
-from triton_backend import Problem, ProfileResult, profile as triton_profile, anti_pytorch_check, adaptive_rel_tol, record_usage
+from triton_backend import Problem, ProfileResult, profile as triton_profile, profile_isolated as triton_profile_isolated, anti_pytorch_check, adaptive_rel_tol, record_usage
 from hardware_profiler import create_profiler, HardwareProfiler, summarize_profile_metrics
 from fix_code_gen import parse_modifications, DiffApplier, truncate_error_log
 
@@ -361,6 +361,18 @@ def _verify_code(code: str, problem: Problem, timeout: int, config: dict | None 
         if "triton.experimental.tle" in code:
             return None, ("[backend] 代码引用了 tle (triton.experimental.tle)，"
                           "但当前后端不是 forge_tle，无法编译。请改用 stock triton API。")
+    # isolated_verify=true：整条验证链进子进程——坏 kernel 的 CUDA 崩溃只死子进程，
+    # 不再毒化主进程 context（work-log 2026-08-27，历史 6/252 run 静默报废的根因）。
+    if config and config.get("isolated_verify"):
+        pr = triton_profile_isolated(
+            code, problem,
+            timeout_seconds=timeout,
+            rel_tol=adaptive_rel_tol(problem),
+            config=config,
+        )
+        if pr.compiled and pr.correct:
+            return pr, None
+        return None, pr.error or "[isolated-crash] verification failed"
     pr = triton_profile(code, problem, timeout_seconds=timeout, rel_tol=adaptive_rel_tol(problem), config=config)
     if pr.compiled and pr.correct:
         return pr, None

@@ -52,6 +52,12 @@ enable_code_checker: true
 # GPU
 timeout_seconds: 300
 
+# 抗上下文中毒（2026-08-27 新增，默认 off）：true 时候选验证（compile+correctness+
+# benchmark）整链放子进程执行——坏 kernel 的 CUDA illegal access 只死子进程，不再
+# 毒化主进程把剩余预算全部连坐报废（历史 6/252 run 中招且零恢复）。代价：每次候选
+# 验证 +2~3s 子进程 import 开销。批量实验强烈建议开启。
+isolated_verify: false
+
 # Hardware profiler (opt-in, adds ~5-15s per correct kernel)
 hw_profiler:
   backend: "noop"     # ncu | noop — ncu needs passwordless `sudo ncu` + absolute python path

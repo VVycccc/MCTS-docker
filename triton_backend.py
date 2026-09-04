@@ -671,10 +671,12 @@ def main():
     if not isinstance(ref_outputs, tuple):
         ref_outputs = (ref_outputs,)
 
+    kernel_used_weights = False
     try:
         if weights is not None:
             try:
                 kernel_outputs = kernel_fn(*inputs, weights=weights)
+                kernel_used_weights = True
             except TypeError:
                 # Kernel doesn't accept weights kwarg — fall back
                 kernel_outputs = kernel_fn(*inputs)
@@ -695,6 +697,30 @@ def main():
         return 0
 
     payload = {"success": True, "failure_kind": "", "message": "PASS"}
+
+    # 可选的子进程内 benchmark（profile_isolated 用；reps=0 时纯正确性，保持旧语义）。
+    # 与 profile() step3 相同的 CUDA-event 计时：warmup → sync → 计时 reps。
+    reps_n = int(cfg.get("reps", 0))
+    if reps_n > 0:
+        def _kcall():
+            if kernel_used_weights:
+                return kernel_fn(*inputs, weights=weights)
+            return kernel_fn(*inputs)
+        try:
+            start = torch.cuda.Event(enable_timing=True)
+            end = torch.cuda.Event(enable_timing=True)
+            for _ in range(int(cfg.get("warmup", 10))):
+                _kcall()
+            torch.cuda.synchronize()
+            start.record()
+            for _ in range(reps_n):
+                _kcall()
+            end.record()
+            torch.cuda.synchronize()
+            payload["latency_ms"] = start.elapsed_time(end) / reps_n
+        except Exception as e:
+            # 镜像 profile()：correctness 已过，bench 失败则无 latency、错误留在 message
+            payload["message"] = f"Benchmark failed: {e}"
     print(json.dumps(payload))
     return 0
 
@@ -714,6 +740,8 @@ def run_isolated_validation(
     device: str = "cuda",
     weights: dict | None = None,
     config: dict | None = None,
+    warmup: int = 0,
+    reps: int = 0,
 ) -> ValidationResult:
     """Validate kernel vs reference in an isolated subprocess using temp files.
 
@@ -721,6 +749,10 @@ def run_isolated_validation(
     saved to a ``.pt`` file in the temp directory and the path is included in
     the runner config so the reference function receives it as a ``weights=``
     keyword argument.
+
+    reps > 0 时子进程在正确性通过后追加 CUDA-event benchmark（warmup 次预热 + reps
+    次计时，latency 附在 JSON payload 里）——profile_isolated 用；默认 0 保持旧调用方
+    （generator.py）纯正确性语义不变。
     """
     # forge_tle / FlagTree triton 3.6: force explicit num_warps to dodge the
     # multi-specialization compiler bug before writing kernel source to disk.
@@ -766,6 +798,9 @@ def run_isolated_validation(
         }
         if weights:
             config_data["weights_path"] = str(weights_path)
+        if reps and reps > 0:
+            config_data["warmup"] = int(warmup)
+            config_data["reps"] = int(reps)
         config_path.write_text(json.dumps(config_data))
 
         try:
@@ -833,6 +868,95 @@ def run_isolated_validation(
                 **{k: v for k, v in payload.items() if k not in {"success", "failure_kind", "message"}},
             },
         )
+
+
+def profile_isolated(
+    source: str,
+    problem: Problem,
+    warmup: int = 10,
+    reps: int = 100,
+    timeout_seconds: float = 300,
+    device: str = "cuda",
+    rel_tol: float = 1e-3,
+    abs_tol: float = 1e-5,
+    config: dict | None = None,
+) -> ProfileResult:
+    """子进程隔离版 compile→correctness→benchmark（_verify_code 的抗中毒路径）。
+
+    背景（work-log 2026-08-27）：进程内 profile() 中一个坏 kernel 的 illegal memory
+    access 会永久毒化主进程 CUDA context，之后所有候选连带报废且不可恢复
+    （历史 6/252 run 中招、零恢复）。本函数把整条验证链放进子进程——炸只死子进程，
+    主进程不受影响；config["isolated_verify"]=true 时由 agents._verify_code 启用。
+
+    代价：每个候选多一次 python+torch import（~8-12s，triton 编译缓存跨进程复用，
+    GPU 计时段与进程内等价）。timeout_seconds 覆盖整条链。
+    """
+    result = ProfileResult()
+    # forge_tle 后端与 profile()/run_isolated_validation 同款 num_warps 防御（forge 下 no-op）
+    if config and config.get("triton_backend", "forge") == "forge_tle":
+        source = _ensure_num_warps(source)
+    source = _patch_device_in_source(source)
+    reference_source = _patch_device_in_source(_extract_expanded_reference(problem.reference))
+
+    vr = run_isolated_validation(
+        kernel_source=source,
+        reference_source=reference_source,
+        problem=problem,
+        rel_tol=rel_tol,
+        abs_tol=abs_tol,
+        timeout_seconds=int(timeout_seconds),
+        device=device,
+        config=config,
+        warmup=warmup,
+        reps=reps,
+    )
+
+    if vr.success:
+        result.compiled = True
+        result.correct = True
+        result.runnable = True
+        lat = vr.details.get("latency_ms") if isinstance(vr.details, dict) else None
+        if lat is not None:
+            result.latency_ms = float(lat)
+        msg = vr.details.get("message") if isinstance(vr.details, dict) else None
+        if isinstance(msg, str) and msg.startswith("Benchmark failed"):
+            # 镜像 profile()：correctness 已过但 bench 失败 → latency None + error 留痕
+            result.error = msg
+        return result
+
+    kind = vr.failure_kind or ("unknown")
+    detail = ""
+    if isinstance(vr.details, dict) and vr.details.get("message"):
+        detail = str(vr.details["message"])
+    elif vr.stderr:
+        tail = [ln for ln in vr.stderr.strip().splitlines() if ln.strip()]
+        detail = tail[-1][:300] if tail else ""
+
+    if kind == "numerical_mismatch":
+        # 走到了数值对比 ⇒ 子进程里编译/运行都成功
+        result.compiled = True
+        result.runnable = True
+        result.error = f"[validation] {detail}"
+    elif kind == "runtime":
+        result.compiled = True
+        result.runnable = True
+        result.error = f"[validation] {detail}"
+    elif kind == "reference_fail":
+        result.error = f"[validation] {detail}"
+    elif kind == "timeout":
+        result.compiled = False
+        result.error = f"[validation] Timeout during isolated verification ({int(timeout_seconds)}s)"
+    else:
+        # subprocess_error / malformed_result：子进程崩溃（含 device-side abort）或无 JSON。
+        # 按 stderr 关键字粗分语法类（≈[compile]）与运行崩溃类。
+        low = (vr.stderr or "").lower()
+        if any(k in low for k in ("syntaxerror", "indentationerror", "modulenotfounderror", "attributeerror")):
+            result.compiled = False
+            result.error = f"[compile] isolated child failed: {detail}"
+        else:
+            result.compiled = False
+            result.error = f"[isolated-crash] rc={vr.failure_kind}: {detail}"
+    return result
 
 
 # ---------------------------------------------------------------------------

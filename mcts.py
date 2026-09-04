@@ -114,6 +114,12 @@ class MCTSNode:
     W: float = 0.0                     # 累计 reward
     P: float = 1.0                     # 先验（创建时按方向赋）
     result: dict | None = None         # unified_editor result（champion 提取用）
+    # —— 溯源字段（serialize_tree 落盘用；id/序号在创建时赋且终身不变）——
+    node_id: str | None = None         # "n0"=root，其后递增
+    order_index: int | None = None     # validated-kernel 预算序号（root=0，按创建序；
+                                       #  反事实重放按它排序即得「同一提议流」）
+    created_rollout: int | None = None   # 创建于第几个 rollout（root=0）
+    created_expansion: int | None = None  # 第几次 expansion 成功产出本节点
 
     @property
     def Q(self) -> float:
@@ -268,10 +274,14 @@ async def _expand(
     applicable_directions: list[dict] | None,
     deadline: float,
     seed_latency: float | None,
+    state: dict | None = None,
 ) -> list[dict]:
     """扩展叶节点：调 unified_editor 对 node 采各方向 patch，成功的成为子节点。
 
     返回 unified_editor 原始 results（含成败），供 experiences / direction_store 复用。
+    state（run 级共享 dict）存在时写入溯源计数：每个成功子节点赋稳定 node_id /
+    order_index / created_{rollout,expansion}（创建序 = unified_editor 串行验证序，
+    即 validated-kernel 预算消耗序）。
     """
     # unified_editor 的 direction_mode 要求 config.direction_organized_frontier=True。
     # 用副本开启，不改调用方 config。
@@ -300,6 +310,13 @@ async def _expand(
     priors = _compute_child_priors(child_dirs, applicable_directions, config)
 
     for r, name, p in zip(successes, child_dirs, priors):
+        prov = state or {}
+        next_index = int(prov.get("next_index", 0)) + 1
+        if state is not None:
+            state["next_index"] = next_index
+            node_id, order_index = f"n{next_index}", next_index
+        else:   # 无溯源状态（旧直调路径）：不赋 id，避免跨 expansion 撞号
+            node_id, order_index = None, None
         child = MCTSNode(
             code=r["code"],
             latency_ms=r["latency_ms"],
@@ -309,6 +326,10 @@ async def _expand(
             direction=name,
             P=p,
             result=r,
+            node_id=node_id,
+            order_index=order_index,
+            created_rollout=prov.get("rollout") if state is not None else None,
+            created_expansion=prov.get("expansion") if state is not None else None,
         )
         node.children.append(child)
 
@@ -375,7 +396,13 @@ async def run_mcts(
         latency_ms=seed_latency,
         hw_metrics=initial_candidate.get("hw_metrics"),
         depth=0,
+        node_id="n0",
+        order_index=0,
+        created_rollout=0,
     )
+    # 溯源计数器：next_index=node_id/order_index 发号；events=每 expansion 的
+    # sampled/validated/失败明细（serialize_tree 之外的 LLM 调用口径记录）。
+    run_state: dict = {"next_index": 0, "rollout": 0, "expansion": 0, "events": []}
 
     # —— 方向（动作集 + 先验来源）——
     use_dirs = bool(config.get("mcts_use_directions", True))
@@ -446,11 +473,39 @@ async def run_mcts(
                     break
                 if terminal_leaf.terminal or terminal_leaf.expanded:
                     break  # 已到终端/死区，停止下行
+                run_state["rollout"] = rollout + 1
+                run_state["expansion"] = expansions + 1
                 results = await _expand(
                     terminal_leaf, experiences, problem, config,
                     applicable_directions, deadline, seed_latency,
+                    state=run_state,
                 )
                 expansions += 1
+                # expansion 级事件：LLM patch 口径（sampled 含失败，validated 只数
+                # 过 compile+correctness+benchmark 门进树的）。失败明细限 200 字符/条。
+                failures = [
+                    {
+                        "branch_id": f.get("branch_id"),
+                        "plan_id": f.get("plan_id"),
+                        "edit_mode": f.get("edit_mode"),
+                        "error": str(f.get("error"))[:200],
+                    }
+                    for f in results if f.get("error")
+                ]
+                run_state["events"].append({
+                    "expansion": expansions,
+                    "rollout": rollout + 1,
+                    "parent_node_id": terminal_leaf.node_id,
+                    "parent_depth": terminal_leaf.depth,
+                    "sampled": len(results),
+                    "validated": len(results) - len(failures),
+                    # 调用数估算：1 patch 调用/候选 + 失败者的 rewrite 调用
+                    # （unified_fail_threshold=1 时恰好精确；threshold>1 为下界，
+                    #   精确 per-call 记账需 record_usage 按 expansion 归集）
+                    "llm_calls_est": len(results)
+                                     + len(failures) * int(config.get("unified_fail_threshold", 3)),
+                    "failures": failures,
+                })
 
                 # experiences + direction_store 记账
                 new_exp = _build_experiences(results, [{
@@ -504,7 +559,23 @@ async def run_mcts(
         champion_node = root.best_node_in_subtree()
         best_lat = champion_node.latency_ms
 
-        # checkpoint（兼容现有 schema：episode/iteration/search_mode/.../candidates）
+        # 带标签节点记录：每 rollout 重写 mcts_tree.json（整量、含全部 code，
+        # ~百 KB 量级），崩溃安全——任一时刻中断都有当前全树的归因数据。
+        tree_record = serialize_tree(root, seed_latency)
+        tree_record["expansion_events"] = list(run_state["events"])
+        tree_record["budget_counters"] = {
+            "checkpoints": rollout + 1,
+            "expansions": expansions,
+            "validated_nodes": run_state["next_index"],
+        }
+        try:
+            with open(Path(output_dir) / "mcts_tree.json", "w") as f:
+                json.dump(tree_record, f, indent=2, default=str)
+        except Exception as e:
+            print(f"[mcts] WARN: mcts_tree write failed: {e!r}")
+
+        # checkpoint（兼容现有 schema：episode/iteration/search_mode/.../candidates；
+        # 新增 champion_node_id/champion_path 指向 mcts_tree.json 的对应记录）
         ckpt = {
             "episode": episode_id,
             "iteration": rollout + 1,
@@ -517,6 +588,9 @@ async def run_mcts(
                 "max_depth_reached": max_depth_reached,
                 "expansions": expansions,
                 "best_latency_ms": best_lat,
+                "champion_node_id": tree_record["champion_node_id"],
+                "champion_path": tree_record["champion_path"],
+                "labeled_records": str(Path(output_dir) / "mcts_tree.json"),
             },
             "candidates": [{
                 "solution_path": initial_candidate.get("solution_path", ""),
@@ -538,6 +612,7 @@ async def run_mcts(
         _interim_final = {
             "search_mode": "mcts",
             "iterations": all_results,
+            "mcts_tree": tree_record,
             "final_candidates": [{
                 "code": _ch.code,
                 "solution_path": initial_candidate.get("solution_path", ""),
@@ -575,11 +650,24 @@ async def run_mcts(
           f"max_depth_reached={max_depth_reached}, expansions={expansions}")
     _print_tree_summary(root, seed_latency)
 
+    # 终版带标签节点记录（与循环内每 rollout 落盘同一 schema；mcts_tree.json 已是最新，
+    # 这里重算一次仅为填进返回值 → main.py 的 final_results.json 也携带）
+    tree_record = serialize_tree(root, seed_latency)
+    tree_record["expansion_events"] = list(run_state["events"])
+    tree_record["budget_counters"] = {
+        "checkpoints": len(all_results),
+        "expansions": expansions,
+        "validated_nodes": run_state["next_index"],
+    }
+    print(f"[mcts] labeled node records: {Path(output_dir) / 'mcts_tree.json'} "
+          f"({tree_record['num_nodes']} nodes, champion={tree_record['champion_node_id']})")
+
     return {
         "candidates": [champion],
         "experiences": experiences,
         "results": all_results,
         "best_latency_ms": champion_node.latency_ms,
+        "mcts_tree": tree_record,
     }
 
 
@@ -588,6 +676,88 @@ def _count_nodes(root: MCTSNode) -> int:
     for c in root.children:
         n += _count_nodes(c)
     return n
+
+
+def serialize_tree(root: MCTSNode, seed_latency: float | None) -> dict:
+    """整树序列化为带标签的节点记录（2026-08-27 新增，落盘到 mcts_tree.json）。
+
+    背景：checkpoint 原本只存 summary（total_nodes/best_latency_ms），无法回答
+    「冠军路径经过哪些方向、是否穿过被贪心策略永久丢弃的回归节点」——这正是论文
+    intro 的机制论断，也是 feedback-loop 对照实验的反事实重放所需的数据。
+
+    每个 node 记录：
+      标签        direction / branch_id / edit_mode / change_description
+      拓扑        node_id / parent_id / depth
+      预算序      order_index（创建序 = validated-kernel 消耗序；root=0）。
+                  按 order_index 排序取 (latency_ms) 流、套 accept-only 规则，
+                  即可离线模拟 single-trajectory feedback loop 在同一提议流下的终点。
+      性能        latency_ms / reward_vs_seed / speedup_vs_seed /
+                  vs_parent_x（<1 即「贪心会拒绝的回归边」）
+      搜索统计    P / N / W / Q / expanded / terminal / terminal_reason
+      创建信息    created_rollout / created_expansion
+      内容        code（完整文本 → 可离线复验正确性/重放）
+
+    champion_path：root→champion 的 (node_id, direction, latency) 链，
+    冠军归因与「第几个方向标签贡献了收益」直接从这条链读出。
+    """
+    champion = root.best_node_in_subtree()
+    nodes = []
+    queue = [root]
+    while queue:
+        n = queue.pop(0)
+        lat = n.latency_ms
+        r = n.result or {}
+        parent_lat = n.parent.latency_ms if n.parent else None
+        nodes.append({
+            "node_id": n.node_id,
+            "parent_id": n.parent.node_id if n.parent else None,
+            "depth": n.depth,
+            "direction": n.direction,
+            "branch_id": r.get("branch_id"),
+            "edit_mode": r.get("edit_mode"),
+            "change_description": r.get("change_description") or "",
+            "order_index": n.order_index,
+            "created_rollout": n.created_rollout,
+            "created_expansion": n.created_expansion,
+            "latency_ms": lat,
+            "reward_vs_seed": round(_reward(lat, seed_latency), 6),
+            "speedup_vs_seed": (round(seed_latency / lat, 6)
+                                if lat and seed_latency else None),
+            # vs_parent_x < 1 ⇒ 相对父节点回归的边（贪心 accept-only 会在此断链）
+            "vs_parent_x": (round(parent_lat / lat, 6)
+                            if lat and parent_lat else None),
+            "P": round(n.P, 6), "N": n.N,
+            "W": round(n.W, 6), "Q": round(n.Q, 6),
+            "expanded": n.expanded,
+            "terminal": n.terminal,
+            "terminal_reason": n.terminal_reason or None,
+            "code": n.code,
+        })
+        queue.extend(n.children)
+
+    path = []
+    cur: MCTSNode | None = champion
+    while cur is not None:
+        path.append({
+            "node_id": cur.node_id,
+            "direction": cur.direction,
+            "latency_ms": cur.latency_ms,
+            "reward_vs_seed": round(_reward(cur.latency_ms, seed_latency), 6),
+            "vs_parent_x": (round(cur.parent.latency_ms / cur.latency_ms, 6)
+                            if (cur.latency_ms and cur.parent
+                                and cur.parent.latency_ms) else None),
+        })
+        cur = cur.parent
+    path.reverse()
+
+    return {
+        "schema_version": 1,
+        "root_node_id": root.node_id,
+        "num_nodes": len(nodes),
+        "champion_node_id": champion.node_id,
+        "champion_path": path,
+        "nodes": nodes,
+    }
 
 
 def _print_tree_summary(root: MCTSNode, seed_latency: float | None) -> None:

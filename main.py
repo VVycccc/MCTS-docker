@@ -520,6 +520,9 @@ async def main():
         "strict_triton": "@triton.jit" in champion.get("code", ""),
         "status": "success",
         "iterations": episode_result["results"] if episode_result else [],
+        # MCTS 带标签节点记录（方向标签/父链/预算序/champion_path，schema 见 mcts.serialize_tree）；
+        # unified 模式无树，缺省为空 dict。详细版同时在 output_dir/mcts_tree.json。
+        "mcts_tree": (episode_result or {}).get("mcts_tree", {}),
         "final_candidates": [
             {
                 "code": c.get("code", ""),
