@@ -103,6 +103,49 @@ def run_akg_arm(problem: Path, run_dir: Path, budget: dict, args) -> dict | None
     return data
 
 
+def write_metadata(out: Path, args, problems):
+    """实验元数据：模型/资源/预算口径/配置快照/代码版本，不含 api_key。"""
+    import platform
+    import subprocess as sp
+
+    def snap(p):
+        d = yaml.safe_load((MCTS_ROOT / p).read_text()) or {}
+        return {k: v for k, v in d.items()
+                if not isinstance(v, dict) or "api_key" not in v}
+
+    gpu = sp.run(["nvidia-smi", "--query-gpu=name,memory.total,driver_version",
+                  "--format=csv,noheader", "-i", args.gpus],
+                 capture_output=True, text=True).stdout.strip()
+    commit = sp.run(["git", "rev-parse", "HEAD"], cwd=MCTS_ROOT,
+                    capture_output=True, text=True).stdout.strip()
+    meta = {
+        "experiment": "equal-resource MCTS vs AKG (best-of-N, 方案A)",
+        "started": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "host": platform.node(),
+        "gpu": gpu,
+        "git_commit": commit,
+        "model": (yaml.safe_load((MCTS_ROOT / args.shared_config).read_text())
+                  .get("model_frontend", {})).get("model"),
+        "budget_policy": ("每题先跑 mcts 臂，final_results.resource_usage 的 "
+                          "llm_calls/total_tokens 回填为 akg 臂 best-of-N 预算；"
+                          "上报延迟只认 profile_isolated 统一 harness"),
+        "configs": {"shared": snap(args.shared_config), "mcts": snap(args.mcts_config)},
+        "problems": [str(p) for p in problems],
+        "repeats": args.repeats,
+    }
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "metadata.json").write_text(json.dumps(meta, indent=1, ensure_ascii=False))
+    (out / "EXPERIMENT.md").write_text(
+        "# 等资源对照实验（MCTS vs AKG）\n\n"
+        f"- 启动：{meta['started']} @ {meta['host']}\n"
+        f"- GPU：{gpu}\n- 模型：{meta['model']}\n- 代码：{commit}\n"
+        f"- 预算口径：{meta['budget_policy']}\n"
+        f"- 题目：{len(problems)} 题（trace 10 题集）× repeats {args.repeats}\n"
+        "- champion 位置：`mcts/<题>_r<k>/champion.py`、"
+        "`akg/<题>_r<k>/champion.py`\n")
+    print(f"[meta] experiment metadata → {out/'metadata.json'}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--problems", required=True, help="题目清单（每行一个 problem json）")
@@ -119,6 +162,7 @@ def main():
     problems = load_problems(Path(args.problems))
     arms = args.arms.split(",")
     print(f"{len(problems)} problems × arms={arms} × repeats={args.repeats}")
+    write_metadata(Path(args.out), args, problems)
 
     for p in problems:
         pname = p.stem
@@ -129,6 +173,10 @@ def main():
             if "mcts" in arms:
                 m = run_mcts_arm(p, Path(args.out) / "mcts" / tag, args)
                 ru = (m or {}).get("resource_usage") or {}
+                if m and m.get("final_candidates"):
+                    code = m["final_candidates"][0].get("code", "")
+                    if code:
+                        (Path(args.out) / "mcts" / tag / "champion.py").write_text(code)
                 if not ru:
                     print("  [mcts] 无 resource_usage，akg 臂退化为自然收敛（不设 cap）")
             if "akg" in arms:

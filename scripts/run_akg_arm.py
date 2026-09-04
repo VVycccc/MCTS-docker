@@ -335,6 +335,11 @@ def driver_main(args):
         if baseline and best else None,
         "wall_seconds": round(time.time() - t0, 1),
     }
+    if best:
+        champion_src = out_dir / best["kernel"]
+        if champion_src.exists():
+            (out_dir / "champion.py").write_text(champion_src.read_text())
+            result["champion_file"] = "champion.py"
     (out_dir / "result.json").write_text(json.dumps(result, indent=1, default=str))
     print(f"=== done === iters={len(iters)} best={best} usage={tot} "
           f"stop={stop_reason}", flush=True)
