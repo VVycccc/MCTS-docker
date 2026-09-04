@@ -1,0 +1,14 @@
+# 等资源对照试验（MCTS vs AKG）题目清单 = work-log 07-29 的 trace 10 题集
+# （5 L1 + 5 L2，7 算子族；GLM/ds4-flash/k3 的 MCTS 结果都在这套上，可直接对照）
+# ---- L1 ----
+problems/kb_level1/01_square_matrix_multiplication.json
+problems/kb_level1/40_layernorm.json
+problems/kb_level1/50_conv_standard_2d_square_input_square_kernel.json
+problems/kb_level1/88_mingptnewgelu.json
+problems/kb_level1/42_max_pooling_2d.json
+# ---- L2 融合 ----
+problems/kb_level2/9_Matmul_Subtract_Multiply_ReLU.json
+problems/kb_level2/18_Matmul_Sum_Max_AvgPool_LogSumExp_LogSumExp.json
+problems/kb_level2/30_Gemm_GroupNorm_Hardtanh.json
+problems/kb_level2/62_Matmul_GroupNorm_LeakyReLU_Sum.json
+problems/kb_level2/76_Gemm_Add_ReLU.json

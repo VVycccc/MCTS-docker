@@ -276,8 +276,8 @@ LLM 凭记忆写的 old_string 常与 baseline 有空白/缩进差异，4 级 fa
 
 老 DirecTune 退役后的新对照：**DirecTune-MCTS（naive seed+树搜索，端到端）vs AKG（上游 master clone `/home/wangyichen/akg`，coder_only_workflow 端到端生成）**。资源对齐方案 A（best-of-N 等资源包）：同一题先跑 MCTS 臂，把其实际消耗（`final_results.json.resource_usage`：llm_calls/total_tokens）回填为 AKG 臂预算；AKG 独立重复生成至预算耗尽取 harness 最优。三轴 = LLM 调用数 + tokens 总量 + wall 兜底；上报延迟只认统一 harness（`profile_isolated`，MCTS 臂 champion 亦有 isolated 复测 `champion_latency_isolated`）。
 
-- 组件：`scripts/run_akg_arm.py`（驱动 `akg/akg_agents/python` 的 LangGraphTask coder_only_workflow + ModelNew→run shim + `LLMClient._update_token_stats` 记账 hook；--single 子进程迭代 + 驱动循环）、`scripts/run_ab_vs_akg.py`（runner：merge config.yaml底座→shared→arm，断点续跑）、`scripts/summarize_ab_vs_akg.py`（配对表+geomean+资源审计）、`config_ab_shared.yaml`/`config_ab_mcts.yaml`/`config_ab_greedy.yaml`（gitignore 排除）、`problems/ab_list_15.txt`（15 题清单）
-- 跑法：`python scripts/run_ab_vs_akg.py --problems problems/ab_list_15.txt --repeats 1`；汇总 `python scripts/summarize_ab_vs_akg.py --out output/ab_vs_akg`
+- 组件：`scripts/run_akg_arm.py`（驱动 `akg/akg_agents/python` 的 LangGraphTask coder_only_workflow + ModelNew→run shim + `LLMClient._update_token_stats` 记账 hook；--single 子进程迭代 + 驱动循环）、`scripts/run_ab_vs_akg.py`（runner：merge config.yaml底座→shared→arm，断点续跑）、`scripts/summarize_ab_vs_akg.py`（配对表+geomean+资源审计）、`config_ab_shared.yaml`/`config_ab_mcts.yaml`/`config_ab_greedy.yaml`（gitignore 排除）、`problems/ab_list_trace10.txt`（work-log 07-29 trace 10 题集，与已有 MCTS 结果同集可比）
+- 跑法：`python scripts/run_ab_vs_akg.py --problems problems/ab_list_trace10.txt --repeats 1`；汇总 `python scripts/summarize_ab_vs_akg.py --out output/ab_vs_akg`
 - smoke 已验证（l2_9：MCTS 1.155ms/6.02× vs AKG best-of-2 4.114ms/1.70×，统一口径）；AKG 单次生成消耗 ~1 call/16K tokens/2.5min，best-of-N 会自动扩到与 MCTS 等资源
 - 注意：`main.py` 现把 `resource_usage` 写进 final_results（此前只在 stdout）；config_ab_* 含 API key（gitignore 已排除）
 
