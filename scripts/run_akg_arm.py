@@ -111,13 +111,15 @@ def extract_task_desc(reference: str) -> str:
 
 
 def shim_modelnew_to_run(code: str, task_desc: str, reference: str) -> str:
-    """AKG 产出 ModelNew class → 加 def run() 适配统一 harness。
-    .pt frozen 权重按参数顺序+形状 zip copy（移植自老 DirecTune generator.py）。"""
-    if "class ModelNew" not in code or "def run(" in code:
+    """AKG 产出适配统一 harness（只认 def run()）：
+    - L2（ModelNew class + .pt 权重）：加带权重 zip-copy 的 run()（移植老 generator.py）
+    - L1（class Model/ModelNew + forward，无权重）：加无参构造的 run(*args) 转发"""
+    if re.search(r"^\s*def run\(", code, re.M):
         return code
-    wp = re.search(r"_weights_path\s*=\s*['\"]([^'\"]+)['\"]", reference)
-    wp = wp.group(1) if wp else ""
-    return code + f"""
+    if "class ModelNew" in code and "_weights_path" in reference:
+        wp = re.search(r"_weights_path\s*=\s*['\"]([^'\"]+)['\"]", reference)
+        wp = wp.group(1) if wp else ""
+        return code + f"""
 
 # --- DirecTune shim (.pt weights aligned, cached) ---
 {task_desc}
@@ -139,6 +141,20 @@ def run(x, *args):
         _MODEL = _MODEL.to(x.device).eval()
     return _MODEL(x, *args)
 """
+    m = re.search(r"class\s+(ModelNew|Model)\b[^:]*:", code)
+    if m:
+        cls = m.group(1)
+        # 镜像 reference 的 run 签名（校验脚本按参数名生成调用）
+        sig_m = re.search(r"def run\s*\((.*?)\)\s*:", reference)
+        sig = sig_m.group(1).strip() if sig_m else "*args"
+        return code + f"""
+
+# --- DirecTune shim (class.forward -> run adapter) ---
+def run({sig}):
+    _m = {cls}()
+    return _m.forward({sig})
+"""
+    return code
 
 
 def run_single(problem, task_desc, out_dir: Path, timeout: float, it: int) -> dict:
