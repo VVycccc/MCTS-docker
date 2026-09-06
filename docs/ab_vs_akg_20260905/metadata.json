@@ -1,0 +1,70 @@
+{
+ "experiment": "equal-resource MCTS vs AKG (best-of-N, 方案A)",
+ "started": "2026-09-05 21:01:59",
+ "host": "user-ThinkStation-PX",
+ "gpu": "NVIDIA GeForce RTX 3090, 24576 MiB, 580.95.05",
+ "git_commit": "8a4c1255d9017c91ca778a229626111ee97d13a1",
+ "model": "GLM-5.2",
+ "budget_policy": "每题先跑 mcts 臂，final_results.resource_usage 的 llm_calls/total_tokens 回填为 akg 臂 best-of-N 预算；上报延迟只认 profile_isolated 统一 harness",
+ "configs": {
+  "shared": {
+   "llm_thinking": {
+    "patch": false,
+    "classifier": false,
+    "rewrite": false,
+    "seed": true
+   },
+   "patch_max_tokens": 8000,
+   "patch_timeout": 300,
+   "unified_temperature": 0.7,
+   "gen_mode": "naive",
+   "gen_refinement_rounds": 2,
+   "isolated_verify": true,
+   "timeout_seconds": 300,
+   "enable_code_checker": true,
+   "triton_backend": "forge",
+   "hw_profiler": {
+    "backend": "noop",
+    "repeat": 100,
+    "ncu_python": "/home/wangyichen/miniconda3/envs/forge/bin/python3"
+   },
+   "budget": {
+    "max_llm_calls": "auto",
+    "benchmark_budget": "auto",
+    "max_tokens": "auto",
+    "wall_clock": 14400
+   },
+   "skill_mode": false,
+   "direction_organized_frontier": false
+  },
+  "mcts": {
+   "search_mode": "mcts",
+   "rounds": 12,
+   "mcts_rollouts": 12,
+   "mcts_rollout_depth": 2,
+   "mcts_max_depth": 4,
+   "mcts_depth_strategy": "adaptive",
+   "mcts_cpuct": 1.0,
+   "mcts_use_directions": true,
+   "mcts_prior_blend": 0.5,
+   "mcts_depth_scale": 1.0,
+   "mcts_min_depth": 2,
+   "mcts_stall_threshold": 0.0488,
+   "mcts_stall_patience": 1,
+   "search_time_budget": 3600
+  }
+ },
+ "problems": [
+  "/home/wangyichen/DirecTune-MCTS/problems/kb_level1/01_square_matrix_multiplication.json",
+  "/home/wangyichen/DirecTune-MCTS/problems/kb_level1/40_layernorm.json",
+  "/home/wangyichen/DirecTune-MCTS/problems/kb_level1/50_conv_standard_2d_square_input_square_kernel.json",
+  "/home/wangyichen/DirecTune-MCTS/problems/kb_level1/88_mingptnewgelu.json",
+  "/home/wangyichen/DirecTune-MCTS/problems/kb_level1/42_max_pooling_2d.json",
+  "/home/wangyichen/DirecTune-MCTS/problems/kb_level2/9_Matmul_Subtract_Multiply_ReLU.json",
+  "/home/wangyichen/DirecTune-MCTS/problems/kb_level2/18_Matmul_Sum_Max_AvgPool_LogSumExp_LogSumExp.json",
+  "/home/wangyichen/DirecTune-MCTS/problems/kb_level2/30_Gemm_GroupNorm_Hardtanh.json",
+  "/home/wangyichen/DirecTune-MCTS/problems/kb_level2/62_Matmul_GroupNorm_LeakyReLU_Sum.json",
+  "/home/wangyichen/DirecTune-MCTS/problems/kb_level2/76_Gemm_Add_ReLU.json"
+ ],
+ "repeats": 1
+}

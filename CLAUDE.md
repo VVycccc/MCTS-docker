@@ -278,12 +278,24 @@ LLM 凭记忆写的 old_string 常与 baseline 有空白/缩进差异，4 级 fa
 
 - 组件：`scripts/run_akg_arm.py`（驱动 `akg/akg_agents/python` 的 LangGraphTask coder_only_workflow + ModelNew→run shim + `LLMClient._update_token_stats` 记账 hook；--single 子进程迭代 + 驱动循环）、`scripts/run_ab_vs_akg.py`（runner：merge config.yaml底座→shared→arm，断点续跑）、`scripts/summarize_ab_vs_akg.py`（配对表+geomean+资源审计）、`config_ab_shared.yaml`/`config_ab_mcts.yaml`/`config_ab_greedy.yaml`（gitignore 排除）、`problems/ab_list_trace10.txt`（work-log 07-29 trace 10 题集，与已有 MCTS 结果同集可比）
 - 跑法：`python scripts/run_ab_vs_akg.py --problems problems/ab_list_trace10.txt --repeats 1`；汇总 `python scripts/summarize_ab_vs_akg.py --out output/ab_vs_akg`
+- **首轮结果（2026-09-05/06 跑完，10/10 双臂通过）**：geomean **MCTS 4.19× vs AKG 2.38×**，计分 7:2:1 平（AKG 两胜在 30/42 的 GroupNorm/pooling 融合；18_Matmul MCTS 166.8× vs 18.8× 为最大差距）。产物：`docs/ab_vs_akg_20260905/`（已推 GitHub）+ work-log 2026-09-05/06 节；TODO：N=1 未覆盖抽卡方差，关键题补 --repeats 3
 - smoke 已验证（l2_9：MCTS 1.155ms/6.02× vs AKG best-of-2 4.114ms/1.70×，统一口径）；AKG 单次生成消耗 ~1 call/16K tokens/2.5min，best-of-N 会自动扩到与 MCTS 等资源
 - 注意：`main.py` 现把 `resource_usage` 写进 final_results（此前只在 stdout）；config_ab_* 含 API key（gitignore 已排除）
 
 ## 打包部署（2026-08-19，2026-09-04 加 champion 导出）
 
 详见 `DEPLOY.md`。要点：`./build.sh` 构建 `directune-mcts:latest` Docker 镜像（自动解引用 `akg_frontend`/`problems` 两个指向老 DirecTune 的 symlink 成自包含上下文）；镜像不含任何 API key。**2026-09-04 起**镜像内置历史 champion 导出：`scripts/export_champions.py` 扫全部 run 的 `final_candidates[0].code`（三种布局：run 根 / mcts 子目录 / 嵌套 ablation+tryN）生成 `output/champions_export/<run>__<problem>.py` + `_manifest.{json,csv}`（已导出文件永不重写，只增量补），build.sh 把它拷进 staging、Dockerfile 烘焙到 **`/app/champions/`**（独立路径，防 `-v output:/app/output` 挂载遮蔽）。配套可移植化改动：`triton_backend.load_problem()` 会把 reference 里写死的 `_weights_path` 重写为按 problem JSON 所在目录解析（L2 JSON 原含 `/home/wangyichen/...` 绝对路径，迁移即失效）；`hardware_profiler` NCU 解释器默认 `sys.executable`（`DT_NCU_PYTHON` / config 可覆盖）；散落脚本（bench_inductor/naive_seed_*/plot_* 等）的绝对路径全部改为相对或环境变量（`DT_DIR_PROBE` / `KB_L1` / `KB_L2`）。
+
+### DCU 部署线（2026-09-05 适配落地，详见 `DEPLOY-DCU.md`）
+
+海光 DCU（JumpServer fifth-dcu-07，8× gfx936 "BW" wave64，DTK/ROCm 栈）的独立部署线，与 CUDA 版完全互斥（镜像/依赖/运行姿势都不同）。适配四件：
+
+1. **打包**：`Dockerfile.dcu`（FROM harbor vllm dtk26.04 base，构建期**污染指纹 diff**：pristine base 对 torch/+triton/+numpy/ 目录字节级 SHA256，pip 后重算 diff（numpy 入指纹：DTK torch 按 NumPy 1.x ABI 编译，pip 抬 numpy 即死，2026-09-06 踩坑）——build 容器无 hyhal 挂载不能 import torch，version.py 文本断言在 torch 2.10 上也不可靠，均 2026-09-05 实测踩坑；import 冒烟放运行期首跑）+ `requirements-dcu.txt`（slim 去掉 triton 行——**DCU 上绝不 pip install triton**，会覆盖 DTK hip fork）+ `build-dcu.sh`（staging + 传输 tar；harbor 开发机不可达，镜像只能在 DCU 机本地 build，源码经 jumpserver 网页上传）。
+2. **代码**：`hw_profile.py` —— prompt 里硬编码的 CUDA 硬件参数（99KB smem、num_warps×32、3090 TFLOPS 表）按 `hardware_profile`（auto/rtx3090/dcu_bw）做字符串级替换；auto 靠 `torch.version.hip` 检测，DCU 机零配置生效，dev 机 rtx3090 下 prompt **逐字节原样**（零回归）。生效点：`main.py` config 加载后 `set_active`，`naive_seed_gen.py`/`agents.py`/`generator.py` 三处 `_read()` 出口。回归：`python scripts/test_hw_profile.py`（无 GPU 无 torch 依赖，含替换规则锚定新鲜度检查——prompt 改版后规则失效会报错）。
+3. **配置**：`config.dcu.yaml`（`hw_profiler.backend: noop` 恒定——NCU 是 CUDA-only；含 API key 不进镜像，运行时挂载）。运行姿势冻结三条硬规则（hyhal 必挂 / 不挂宿主 dtk / 不动 LD_LIBRARY_PATH）见 DEPLOY-DCU.md。
+4. **探针**：`scripts/dcu_hw_probe.py`（自包含 heredoc 可跑；回填 gfx936 LDS/warp_size 实测值 + fp32 allow_tf32 精度，补 dcu_smoke s4 之外的口径）。
+
+已知 DCU 差异：wave64（num_warps=8=512 线程）、LDS 64KB（保守值待 probe 回填）、fp16 tl.dot rel_err≈2e-2（precision_tc 方向被 L1 关卡优雅拒收）、无 NCU。静态 diff 评估：主路径无 Python 3.11+ 语法、无 triton 3.6+ 特有 API、无 nvidia-smi/NCU 硬依赖、`torch.cuda` 命名空间全兼容（冒烟 L1 已证）。
 
 ## 模块职责
 
